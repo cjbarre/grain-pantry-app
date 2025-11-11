@@ -5,6 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --font-sans: 'VT323', monospace;
+  --font-mono: 'VT323', monospace;
   --background: oklch(0.97 0.01 85);
   --foreground: oklch(0.45 0.18 265);
   --card: oklch(1 0 0);
@@ -76,6 +78,8 @@
 }
 
 @theme inline {
+  --font-family-sans: 'VT323', monospace;
+  --font-family-mono: 'VT323', monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -118,21 +122,26 @@
   * {
     @apply border-border outline-ring/50;
   }
+
+  html {
+    font-size: 20px; /* VT323 looks better at larger sizes */
+  }
+
   body {
     @apply bg-background text-foreground;
     overflow-y: scroll;
-    font-weight: 450;
-    letter-spacing: -0.011em;
+    font-weight: 400;
+    letter-spacing: normal; /* VT323 doesn't need letter-spacing adjustments */
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-weight: 650;
-    letter-spacing: -0.015em;
+    font-weight: 400;
+    letter-spacing: normal;
   }
 
   button {
-    font-weight: 600;
-    letter-spacing: -0.005em;
+    font-weight: 400;
+    letter-spacing: normal;
   }
 
   /* Chunky borders for bold aesthetic */

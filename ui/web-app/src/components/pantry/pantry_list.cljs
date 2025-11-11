@@ -148,8 +148,7 @@
 
                        ;; Category badges
                        ($ :div {:class "space-y-2"}
-                          ($ label/Label "Category "
-                             ($ :span {:class "text-red-500"} "*"))
+                          ($ label/Label "Category")
                           ($ :div {:class "flex flex-wrap gap-2"}
                              (for [cat (filter #(not= % "All") categories)]
                                ($ badge/Badge

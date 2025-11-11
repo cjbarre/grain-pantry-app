@@ -10,6 +10,9 @@
 (defn check-expiring-items
   "Daily task to check for items expiring soon and log warnings"
   [{:keys [event-store] :as _context} _time]
+  ;; NOTE: Currently fetches ALL pantry events across all households
+  ;; TODO: Optimize by querying each household separately with tags if household list available
+  ;;       e.g., (es/read event-store {:types rm/pantry-event-types :tags #{[:household household-id]}})
   (let [all-items (->> (es/read event-store {:types rm/pantry-event-types})
                        (rm/apply-pantry-events)
                        (vals))

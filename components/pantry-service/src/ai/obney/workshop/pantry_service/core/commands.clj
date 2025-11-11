@@ -116,11 +116,11 @@
     {:keys [user-id household-id]} :auth-claims
     :keys [event-store]}]
   ;; Get completed shopping items from read model
-  (let [shopping-items (->> (es/read event-store {:types rm/shopping-event-types})
+  (let [shopping-items (->> (es/read event-store {:types rm/shopping-event-types
+                                                   :tags #{[:household household-id]}})
                             (rm/apply-shopping-events)
                             (vals)
-                            (filter #(and (= (:household-id %) household-id)
-                                        (:checked %))))
+                            (filter :checked))
         item-ids (mapv :item-id shopping-items)]
     (if (empty? item-ids)
       {:command/result {:removed-count 0}}
@@ -136,11 +136,11 @@
     {:keys [user-id household-id]} :auth-claims
     :keys [event-store]}]
   ;; Get shopping items details from read model
-  (let [shopping-items (->> (es/read event-store {:types rm/shopping-event-types})
+  (let [shopping-items (->> (es/read event-store {:types rm/shopping-event-types
+                                                   :tags #{[:household household-id]}})
                             (rm/apply-shopping-events)
                             (vals)
-                            (filter #(and (= (:household-id %) household-id)
-                                        (some #{(:item-id %)} item-ids))))
+                            (filter #(some #{(:item-id %)} item-ids)))
         ;; Create pantry-item/added events for each shopping item
         pantry-events (mapv (fn [item]
                               (->event {:type :pantry-item/added

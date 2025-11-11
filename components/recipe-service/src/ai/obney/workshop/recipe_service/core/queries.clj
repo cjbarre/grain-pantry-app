@@ -80,10 +80,10 @@
     {:keys [user-id]} :auth-claims
     :keys [event-store]}]
   ;; TODO: Verify user is member of household
-  (let [pantry-items (->> (es/read event-store {:types pantry/pantry-event-types})
+  (let [pantry-items (->> (es/read event-store {:types pantry/pantry-event-types
+                                                 :tags #{[:household household-id]}})
                           (pantry/apply-pantry-events)
-                          (vals)
-                          (filter #(= (:household-id %) household-id)))
+                          (vals))
         matched-recipes (mapv #(calculate-match % pantry-items) mock-recipes)
         sorted-recipes (sort-by :match-percent > matched-recipes)]
     {:query/result

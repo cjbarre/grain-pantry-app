@@ -17,12 +17,12 @@
   [{{:keys [category search]} :query
     {:keys [household-id]} :auth-claims
     :keys [event-store]}]
-  (let [all-items (->> (es/read event-store {:types rm/pantry-event-types})
-                       (rm/apply-pantry-events)
-                       (vals))]
+  (let [household-items (->> (es/read event-store {:types rm/pantry-event-types
+                                                    :tags #{[:household household-id]}})
+                             (rm/apply-pantry-events)
+                             (vals))]
     {:query/result
-     (->> all-items
-          (filter #(= (:household-id %) household-id))
+     (->> household-items
           (filter #(or (nil? category)
                       (= (:category %) category)))
           (filter #(or (nil? search)
@@ -40,13 +40,13 @@
   [{{:keys [days]} :query
     {:keys [household-id]} :auth-claims
     :keys [event-store]}]
-  (let [all-items (->> (es/read event-store {:types rm/pantry-event-types})
-                       (rm/apply-pantry-events)
-                       (vals))
+  (let [household-items (->> (es/read event-store {:types rm/pantry-event-types
+                                                    :tags #{[:household household-id]}})
+                             (rm/apply-pantry-events)
+                             (vals))
         now (java.time.LocalDate/now)]
     {:query/result
-     (->> all-items
-          (filter #(= (:household-id %) household-id))
+     (->> household-items
           (filter :expires)
           (map (fn [item]
                  (when-let [expires-str (:expires item)]
@@ -72,12 +72,12 @@
   [{_query :query
     {:keys [household-id]} :auth-claims
     :keys [event-store]}]
-  (let [all-items (->> (es/read event-store {:types rm/shopping-event-types})
-                       (rm/apply-shopping-events)
-                       (vals))]
+  (let [household-items (->> (es/read event-store {:types rm/shopping-event-types
+                                                    :tags #{[:household household-id]}})
+                             (rm/apply-shopping-events)
+                             (vals))]
     {:query/result
-     (->> all-items
-          (filter #(= (:household-id %) household-id))
+     (->> household-items
           (mapv (fn [item]
                   {:id (:item-id item)
                    :name (:name item)
@@ -95,7 +95,8 @@
   [{_query :query
     {:keys [household-id]} :auth-claims
     :keys [event-store]}]
-  (let [households (->> (es/read event-store {:types rm/household-event-types})
+  (let [households (->> (es/read event-store {:types rm/household-event-types
+                                              :tags #{[:household household-id]}})
                         (rm/apply-household-events))
         household (get households household-id)]
     (if household

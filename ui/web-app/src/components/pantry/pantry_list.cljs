@@ -17,25 +17,33 @@
 
 (defui item-card [{:keys [id name quantity category expires on-delete]}]
   ($ card/Card {:class "relative"}
-     ($ card/CardHeader
-        ($ :div {:class "flex items-start justify-between"}
-           ($ :div
-              ($ card/CardTitle {:class "text-lg"} name)
-              ($ card/CardDescription {:class "flex items-center gap-2 mt-2"}
-                 ($ Package {:size 14})
-                 quantity))
-           ($ :div {:class "flex items-center gap-2"}
-              ($ badge/Badge {:variant "outline"} category)
-              ($ button/Button
-                 {:variant "ghost"
-                  :size "icon-sm"
-                  :on-click #(when on-delete (on-delete id))}
-                 ($ Trash2 {:size 16})))))
-     ($ card/CardContent
-        (when expires
-          ($ :div {:class "flex items-center gap-2 text-sm text-muted-foreground"}
-             ($ Calendar {:size 14})
-             ($ :span "Expires: " expires))))))
+     ($ card/CardHeader {:class "pb-3"}
+        ;; Top row: Category badge, Name, Delete button (all inline)
+        ($ :div {:class "flex items-center justify-between gap-3"}
+           ($ badge/Badge {:variant "outline"} category)
+           ($ card/CardTitle {:class "text-lg flex-1"} name)
+           ($ button/Button
+              {:variant "ghost"
+               :size "icon-sm"
+               :on-click #(when on-delete (on-delete id))}
+              ($ Trash2 {:size 16}))))
+
+     ;; Horizontal divider
+     ($ :div {:class "border-t-2 border-border"})
+
+     ;; Bottom row: Quantity and Expiry split 50/50
+     ($ card/CardContent {:class "pt-3"}
+        ($ :div {:class "flex items-center gap-4"}
+           ;; Quantity section
+           ($ :div {:class "flex items-center gap-2 flex-1"}
+              ($ Package {:size 14})
+              ($ :span {:class "text-sm"} "QTY: " quantity))
+
+           ;; Expiry section
+           (when expires
+             ($ :div {:class "flex items-center gap-2 flex-1"}
+                ($ Calendar {:size 14})
+                ($ :span {:class "text-sm"} "EXP: " expires)))))))
 
 (defui view []
   (let [ctx (context/use-context)

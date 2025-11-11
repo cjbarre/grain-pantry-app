@@ -4,19 +4,19 @@
         nrepl/nrepl {:mvn/version "1.3.1"}
 
         obneyai/grain-core                               {:git/url "https://github.com/ObneyAI/grain.git"
-                                                          :sha "f36aa0111498bb6b563455d944c940993127577f"
+                                                          :sha "cbaf084a07cc510623bc315ab2e001dc72fcca94"
                                                           :deps/root "projects/grain-core"}
 
         obneyai/grain-event-store-postgres-v2            {:git/url "https://github.com/ObneyAI/grain.git"
-                                                          :sha "f36aa0111498bb6b563455d944c940993127577f"
+                                                          :sha "cbaf084a07cc510623bc315ab2e001dc72fcca94"
                                                           :deps/root "projects/grain-event-store-postgres-v2"}
 
         obneyai/grain-dspy-extensions                    {:git/url "https://github.com/ObneyAI/grain.git"
-                                                          :sha "f36aa0111498bb6b563455d944c940993127577f"
+                                                          :sha "cbaf084a07cc510623bc315ab2e001dc72fcca94"
                                                           :deps/root "projects/grain-dspy-extensions"}
 
         obneyai/grain-mulog-aws-cloudwatch-emf-publisher {:git/url "https://github.com/ObneyAI/grain.git"
-                                                          :sha "f36aa0111498bb6b563455d944c940993127577f"
+                                                          :sha "cbaf084a07cc510623bc315ab2e001dc72fcca94"
                                                           :deps/root "projects/grain-mulog-aws-cloudwatch-emf-publisher"}}
  :aliases {:test {:extra-paths ["test"]
                   :extra-deps {}}}}

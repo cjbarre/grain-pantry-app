@@ -1,16 +1,18 @@
 (ns components.router.core
   (:require [reitit.frontend :as rf]
-            [pushy.core :as pushy] 
+            [pushy.core :as pushy]
             [uix.core :as uix :refer [defui $]]
             [re-frame.uix :refer [use-subscribe]]
             [components.auth.interface :as auth]
             [components.context.interface :as context]
-            [store.auth.subs :as auth-subs] 
-            [components.home.interface :as home]))
+            [store.auth.subs :as auth-subs]
+            [components.home.interface :as home]
+            [components.pantry.interface :as pantry]))
 
 (def routes
-  [["/" {:name :root :redirect "/home"}]
+  [["/" {:name :root :redirect "/pantry"}]
    ["/home" {:name :home :view home/main}]
+   ["/pantry" {:name :pantry :view pantry/main}]
    ["/auth"
     ["" {:name :auth :view auth/main}]
     ["/*path" {:name :auth-sub :view auth/main}]]])
@@ -48,11 +50,11 @@
         redirect (do (js/setTimeout #(set! js/window.location.pathname redirect) 0) nil)
         
         ;; Don't render anything while checking auth status for protected routes
-        (and (#{:home} route-name) (= auth-status :loading))
+        (and (#{:home :pantry} route-name) (= auth-status :loading))
         nil
 
         ;; Check authentication for protected routes
-        (and (#{:home} route-name) (not= auth-status true))
+        (and (#{:home :pantry} route-name) (not= auth-status true))
         (do (js/setTimeout #(navigate! :auth) 0) nil)
         
         view ($ view {:current-match current-match})

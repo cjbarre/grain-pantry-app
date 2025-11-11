@@ -15,11 +15,12 @@
     (:event/type event)))
 
 (defmethod apply-event :user/signed-up
-  [state {:keys [user-id email-address password]}]
+  [state {:keys [user-id email-address password household-id]}]
   (-> state
       (assoc-in [user-id :user/id] user-id)
       (assoc-in [user-id :user/email-address] email-address)
-      (assoc-in [user-id :user/password] password)))
+      (assoc-in [user-id :user/password] password)
+      (assoc-in [user-id :user/household-id] household-id)))
 
 
 (defmethod apply-event :user/password-reset

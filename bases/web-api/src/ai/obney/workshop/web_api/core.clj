@@ -14,6 +14,9 @@
 
             [ai.obney.workshop.user-service.interface :as user-service]
             [ai.obney.workshop.user-service.interface.schemas]
+            [ai.obney.workshop.pantry-service.interface :as pantry-service]
+            [ai.obney.workshop.pantry-service.interface.schemas]
+            [ai.obney.workshop.recipe-service.interface :as recipe-service]
 
             [clojure.set :as set]
             [com.brunobonacci.mulog :as u]
@@ -59,8 +62,11 @@
                       :context (ig/ref ::context)}
 
    ::context {:event-store (ig/ref ::event-store)
-              :command-registry (merge user-service/commands)
-              :query-registry (merge user-service/queries)
+              :command-registry (merge user-service/commands
+                                       pantry-service/commands)
+              :query-registry (merge user-service/queries
+                                     pantry-service/queries
+                                     recipe-service/queries)
               :event-pubsub (ig/ref ::event-pubsub)
               :email-client (email-ses/->SES (cond-> {}
                                                (:localstack/enabled env) (assoc :localstack/enabled true)
@@ -148,7 +154,8 @@
                :handler-fn (:handler-fn %)
                :topics (:topics %)})
    (concat
-    (vals user-service/todo-processors))))
+    (vals user-service/todo-processors)
+    (vals pantry-service/todo-processors))))
 
 (defmethod ig/halt-key! ::todo-processors [_ todo-processors]
   (doseq [tp todo-processors]
@@ -204,9 +211,14 @@
     (fn [context]
       (let [token (get-in context [:request :cookies "auth-token" :value])
             payload (try (jwt/unsign {:token token :secret (:jwt-secret env)})
-                         (catch Exception _))]
+                         (catch Exception _))
+            ;; Parse user-id and household-id from strings to UUIDs
+            parsed-payload (when payload
+                            (cond-> payload
+                              (:user-id payload) (assoc :user-id (java.util.UUID/fromString (:user-id payload)))
+                              (:household-id payload) (assoc :household-id (java.util.UUID/fromString (:household-id payload)))))]
         (cond-> context
-          payload (assoc-in [:grain/additional-context :auth-claims] payload))))}))
+          parsed-payload (assoc-in [:grain/additional-context :auth-claims] parsed-payload))))}))
 
 (defmethod ig/init-key ::webserver [_ config]
   (ws/start (-> config

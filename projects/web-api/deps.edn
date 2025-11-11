@@ -1,7 +1,9 @@
 {:deps {org.clojure/clojure {:mvn/version "1.12.0"}
-        
+
         web-api/web-api {:local/root "../../bases/web-api"}
         web-api/user-service {:local/root "../../components/user-service"}
+        web-api/pantry-service {:local/root "../../components/pantry-service"}
+        web-api/recipe-service {:local/root "../../components/recipe-service"}
 
         web-api/crypto {:local/root "../../components/crypto"}
         web-api/crypto-kms {:local/root "../../components/crypto-kms"}

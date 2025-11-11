@@ -12,7 +12,8 @@
   {:user/signed-up [:map
                     [:user-id :uuid]
                     [:email-address :string]
-                    [:password :string]]
+                    [:password :string]
+                    [:household-id :uuid]]
    :user/logged-in [:map
                     [:user-id :uuid]
                     [:email-address :string]]

@@ -30,12 +30,15 @@
     (if (contains? existing-email-addresses email-address)
       {::anom/category ::anom/conflict
        ::anom/message "Email already registered to existing account!"}
-      (let [user-id (random-uuid)]
+      (let [user-id (random-uuid)
+            household-id (random-uuid)]
         {:command-result/events [(->event {:type :user/signed-up
                                            :tags #{[:user user-id]}
                                            :body {:user-id user-id
                                                   :email-address email-address
-                                                  :password (hashers/derive password)}})]}))))
+                                                  :password (hashers/derive password)
+                                                  :household-id household-id}})]
+         :command/result {:household-id household-id}}))))
 
 ;; TODO: Check that email verification has occurred
 (defn login
@@ -47,6 +50,7 @@
        ::anom/message "Invalid Credentials!"}
       (let [{user-id :user/id
              existing-password :user/password
+             household-id :user/household-id
              :as user}
             (->> (es/read event-store {:types rm/user-event-types})
                  (rm/apply-events)
@@ -71,7 +75,8 @@
            :jwt (jwt/sign
                  {:payload
                   {:user-id (str user-id)
-                   :email email-address}
+                   :email email-address
+                   :household-id (str household-id)}
                   :secret jwt-secret
                   :does-not-expire true})})))))
 

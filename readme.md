@@ -4,6 +4,25 @@ This project is an end-to-end example of building an event-sourced application w
 
 Note: This is an active WIP
 
+## Features
+
+### Core Functionality
+- **Pantry Tracking**: Add, update, and remove items with quantities, categories, and expiration dates
+- **Shopping Lists**: Manage shopping items with recipe linking and bulk operations (clear completed, move to pantry)
+- **Multi-tenant Households**: Secure, isolated data per household with member management
+- **Authentication**: JWT-based auth with email verification and password reset
+
+### AI Copilot
+- **Conversational Assistant**: Chat interface with context-aware responses about your pantry
+- **Executable Actions**: AI suggests and executes pantry/shopping operations with one click
+- **Event-Sourced Conversations**: Full conversation history with audit trail
+- **Behavior Trees + DSPy**: Type-safe LLM orchestration with chain-of-thought reasoning
+
+### Technical Architecture
+- **Event Sourcing + CQRS**: Immutable event log with separate read/write models
+- **Polylith Monorepo**: Component-based architecture (Clojure backend, ClojureScript frontend)
+- **Modern Stack**: Grain framework, Re-frame state management, shadcn/ui components, Tailwind CSS v4
+
 # Dependencies
 - Clojure
 - Polylith

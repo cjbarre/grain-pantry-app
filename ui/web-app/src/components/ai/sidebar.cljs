@@ -10,9 +10,26 @@
             [store.ai.subs :as ai-subs]
             [store.ai.events :as ai-events]))
 
+(defui suggested-action-button
+  "Button for executing AI-suggested actions"
+  [{:keys [action executing? executed?]}]
+  ($ button/Button
+     {:on-click #(rf/dispatch [::ai-events/execute-suggested-action action])
+      :disabled (or executing? executed?)
+      :variant "outline"
+      :size "sm"
+      :class "mt-2 w-full justify-start text-left h-auto min-h-[2rem] whitespace-normal"}
+     ($ :div {:class "flex items-start gap-2 w-full py-1"}
+        (when executed?
+          ($ :span {:class "shrink-0 mt-0.5"} "✓ "))
+        ($ :span {:class "flex-1 break-words"}
+           (get action "description" (:description action)))
+        (when executing?
+          ($ :span {:class "shrink-0 animate-pulse"} "...")))))
+
 (defui chat-message
   "Individual chat message component"
-  [{:keys [role content]}]
+  [{:keys [role content suggested-actions]}]
   ($ :div {:class (str "flex gap-3 mb-3 "
                       (if (= role "user") "justify-end" "justify-start"))}
      ;; Avatar icon
@@ -20,12 +37,22 @@
        ($ :div {:class "w-8 h-8 flex items-center justify-center border-2 border-primary bg-card"}
           ($ Bot {:size 20 :class "text-primary"})))
 
-     ;; Message bubble
+     ;; Message bubble with actions
      ($ :div {:class (str "border-2 px-3 py-2 max-w-[75%] "
                          (if (= role "user")
                            "bg-primary text-primary-foreground border-primary"
                            "bg-card border-border"))}
-        content)
+        ($ :div content)
+
+        ;; Suggested actions (only for assistant messages)
+        (when (and (= role "assistant") (seq suggested-actions))
+          ($ :div {:class "mt-3 flex flex-col gap-2"}
+             (for [[idx action] (map-indexed vector suggested-actions)]
+               ($ suggested-action-button
+                  {:key idx
+                   :action action
+                   :executing? false
+                   :executed? false})))))
 
      ;; User avatar
      (when (= role "user")
@@ -34,17 +61,19 @@
 
 (defui ai-sidebar
   "AI Copilot sidebar - collapsible chat interface"
-  []
+  [{:keys [collapsed on-toggle]}]
   (let [conversation (use-subscribe [::ai-subs/conversation])
         loading (use-subscribe [::ai-subs/loading])
         [input-value set-input-value] (use-state "")
-        [collapsed set-collapsed] (use-state false)
         messages-end-ref (use-ref nil)
 
         handle-send (fn []
                      (when (and (not-empty input-value) (not loading))
                        (rf/dispatch [::ai-events/ask-ai input-value])
                        (set-input-value "")))
+
+        handle-toggle (fn []
+                       (when on-toggle (on-toggle)))
 
         ;; Auto-scroll to bottom on new messages
         _ (use-effect
@@ -57,15 +86,15 @@
     (if collapsed
       ;; Collapsed state - floating button
       ($ button/Button
-         {:class "fixed right-4 bottom-4 w-14 h-14"
+         {:class "fixed right-4 bottom-4 w-14 h-14 z-50"
           :size "icon"
-          :on-click #(set-collapsed false)}
+          :on-click handle-toggle}
          ($ Bot {:size 24}))
 
       ;; Expanded state - full sidebar
-      ($ card/Card {:class "fixed right-4 top-20 bottom-4 w-96 flex flex-col"}
+      ($ card/Card {:class "fixed right-4 top-20 bottom-4 w-96 flex flex-col z-50"}
          ($ card/CardHeader {:class "flex-row items-center justify-between pb-3 cursor-pointer"
-                            :on-click #(set-collapsed true)}
+                            :on-click handle-toggle}
             ($ :div {:class "flex items-center gap-2"}
                ($ Bot {:size 20 :class "text-primary"})
                ($ card/CardTitle "AI Copilot"))
@@ -85,7 +114,8 @@
                       ($ chat-message
                          {:key idx
                           :role (:role msg)
-                          :content (:content msg)}))
+                          :content (:content msg)
+                          :suggested-actions (:suggested-actions msg)}))
                     ($ :div {:ref messages-end-ref})))
 
                (when loading

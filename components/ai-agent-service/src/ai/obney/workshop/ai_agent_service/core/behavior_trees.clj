@@ -59,7 +59,8 @@
 
     ;; Store in short-term memory for LLM access (stringify UUIDs for JSON serialization)
     (swap! st-memory assoc :pantry_context
-      {:items (stringify-uuids pantry-items)
+      {:current-date (str now)
+       :items (stringify-uuids pantry-items)
        :expiring-soon (stringify-uuids expiring-soon)
        :categories categories})
 

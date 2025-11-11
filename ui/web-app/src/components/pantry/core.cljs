@@ -40,33 +40,38 @@
             [components.ai.sidebar :as ai-sidebar]))
 
 (defui main []
-  ($ :<>
-     ;; Main content
-     ($ :div {:class "container mx-auto p-6 max-w-7xl"}
-        ;; Header
-        ($ :div {:class "mb-6"}
-           ($ :h1 {:class "text-3xl font-bold mb-2"} "Pantry Dashboard")
-           ($ :p {:class "text-muted-foreground"}
-              "Track your ingredients and discover recipes you can make"))
+  (let [[sidebar-collapsed set-sidebar-collapsed] (uix/use-state false)]
+    ($ :div {:class "flex"}
+       ;; Main content with dynamic padding
+       ($ :div {:class (str "flex-1 transition-all duration-300 "
+                           (when-not sidebar-collapsed "mr-[25rem]"))}
+          ($ :div {:class "container mx-auto p-6 max-w-7xl"}
+             ;; Header
+             ($ :div {:class "mb-6"}
+                ($ :h1 {:class "text-3xl font-bold mb-2"} "Pantry Dashboard")
+                ($ :p {:class "text-muted-foreground"}
+                   "Track your ingredients and discover recipes you can make"))
 
-        ;; Tabs
-        ($ tabs/Tabs {:defaultValue "pantry" :class "w-full"}
-           ($ tabs/TabsList {:class "grid w-full grid-cols-3 mb-6"}
-              ($ tabs/TabsTrigger {:value "pantry"} "My Pantry")
-              ($ tabs/TabsTrigger {:value "recipes"} "Recipe Suggestions")
-              ($ tabs/TabsTrigger {:value "shopping"} "Shopping List"))
+             ;; Tabs
+             ($ tabs/Tabs {:defaultValue "pantry" :class "w-full"}
+                ($ tabs/TabsList {:class "grid w-full grid-cols-3 mb-6"}
+                   ($ tabs/TabsTrigger {:value "pantry"} "My Pantry")
+                   ($ tabs/TabsTrigger {:value "recipes"} "Recipe Suggestions")
+                   ($ tabs/TabsTrigger {:value "shopping"} "Shopping List"))
 
-           ;; Pantry Tab
-           ($ tabs/TabsContent {:value "pantry"}
-              ($ pantry-list/view))
+                ;; Pantry Tab
+                ($ tabs/TabsContent {:value "pantry"}
+                   ($ pantry-list/view))
 
-           ;; Recipes Tab
-           ($ tabs/TabsContent {:value "recipes"}
-              ($ recipes/view))
+                ;; Recipes Tab
+                ($ tabs/TabsContent {:value "recipes"}
+                   ($ recipes/view))
 
-           ;; Shopping List Tab
-           ($ tabs/TabsContent {:value "shopping"}
-              ($ shopping/view))))
+                ;; Shopping List Tab
+                ($ tabs/TabsContent {:value "shopping"}
+                   ($ shopping/view)))))
 
-     ;; AI Copilot Sidebar
-     ($ ai-sidebar/ai-sidebar)))
+       ;; AI Copilot Sidebar
+       ($ ai-sidebar/ai-sidebar
+          {:collapsed sidebar-collapsed
+           :on-toggle #(set-sidebar-collapsed (not sidebar-collapsed))}))))

@@ -15,6 +15,7 @@
 
    ::pantry-context
    [:map {:desc "Current pantry state for AI context"}
+    [:current-date :string]
     [:items [:vector :map]]
     [:expiring-soon [:vector :map]]
     [:categories [:vector :string]]]

@@ -6,7 +6,18 @@
   "Initialize the application database with default state"
   []
   {:auth {:status :loading  ;; :loading | true | false
-          :user nil}})       ;; {:email "..."})
+          :user nil}        ;; {:email "..."}
+   :pantry {:items []
+            :shopping-list []
+            :recipes []
+            :loading false
+            :error nil
+            :form {:name ""
+                   :quantity "1"
+                   :category ""
+                   :expires ""
+                   :expanded false
+                   :error false}}})
 
 (rf/reg-event-db
  ::initialize

@@ -257,3 +257,32 @@
     (-> db
         (assoc-in [:pantry :loading] false)
         (assoc-in [:pantry :error] error))))
+
+;;
+;; Pantry Form State Management
+;;
+
+(rf/reg-event-db
+  ::set-form-field
+  (fn [db [_ field value]]
+    (assoc-in db [:pantry :form field] value)))
+
+(rf/reg-event-db
+  ::set-form-expanded
+  (fn [db [_ expanded?]]
+    (assoc-in db [:pantry :form :expanded] expanded?)))
+
+(rf/reg-event-db
+  ::set-form-error
+  (fn [db [_ error?]]
+    (assoc-in db [:pantry :form :error] error?)))
+
+(rf/reg-event-db
+  ::reset-form
+  (fn [db [_]]
+    (assoc-in db [:pantry :form] {:name ""
+                                   :quantity "1"
+                                   :category ""
+                                   :expires ""
+                                   :expanded false
+                                   :error false})))

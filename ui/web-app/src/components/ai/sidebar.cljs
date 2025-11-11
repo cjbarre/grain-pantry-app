@@ -7,6 +7,7 @@
             ["/gen/shadcn/components/ui/button" :as button]
             ["/gen/shadcn/components/ui/input" :as input]
             ["lucide-react" :refer [Send Bot User ChevronRight ChevronDown]]
+            ["marked" :as marked]
             [store.ai.subs :as ai-subs]
             [store.ai.events :as ai-events]))
 
@@ -30,34 +31,49 @@
 (defui chat-message
   "Individual chat message component"
   [{:keys [role content suggested-actions]}]
-  ($ :div {:class (str "flex gap-3 mb-3 "
-                      (if (= role "user") "justify-end" "justify-start"))}
-     ;; Avatar icon
-     (when (= role "assistant")
-       ($ :div {:class "w-8 h-8 flex items-center justify-center border-2 border-primary bg-card"}
-          ($ Bot {:size 20 :class "text-primary"})))
+  (let [rendered-html (when (= role "assistant")
+                        (marked/parse content #js {:breaks true :gfm true}))]
+    (cond
+      ;; System messages (action feedback) - centered, no avatar
+      (= role "system")
+      ($ :div {:class "flex justify-center mb-3"}
+         ($ :div {:class "text-sm text-muted-foreground px-3 py-1 border border-border bg-muted max-w-[85%]"}
+            content))
 
-     ;; Message bubble with actions
-     ($ :div {:class (str "border-2 px-3 py-2 max-w-[75%] "
-                         (if (= role "user")
-                           "bg-primary text-primary-foreground border-primary"
-                           "bg-card border-border"))}
-        ($ :div content)
+      ;; Regular user/assistant messages
+      :else
+      ($ :div {:class (str "flex gap-3 mb-3 "
+                          (if (= role "user") "justify-end" "justify-start"))}
+         ;; Avatar icon
+         (when (= role "assistant")
+           ($ :div {:class "w-8 h-8 flex items-center justify-center border-2 border-primary bg-card"}
+              ($ Bot {:size 20 :class "text-primary"})))
 
-        ;; Suggested actions (only for assistant messages)
-        (when (and (= role "assistant") (seq suggested-actions))
-          ($ :div {:class "mt-3 flex flex-col gap-2"}
-             (for [[idx action] (map-indexed vector suggested-actions)]
-               ($ suggested-action-button
-                  {:key idx
-                   :action action
-                   :executing? false
-                   :executed? false})))))
+         ;; Message bubble with actions
+         ($ :div {:class (str "border-2 px-3 py-2 max-w-[75%] "
+                             (if (= role "user")
+                               "bg-primary text-primary-foreground border-primary"
+                               "bg-card border-border"))}
+            ;; Render markdown for assistant, plain text for user
+            (if (= role "assistant")
+              ($ :div {:class "prose prose-sm max-w-none"
+                       :dangerouslySetInnerHTML #js {:__html rendered-html}})
+              ($ :div content))
 
-     ;; User avatar
-     (when (= role "user")
-       ($ :div {:class "w-8 h-8 flex items-center justify-center border-2 border-foreground bg-card"}
-          ($ User {:size 20})))))
+            ;; Suggested actions (only for assistant messages)
+            (when (and (= role "assistant") (seq suggested-actions))
+              ($ :div {:class "mt-3 flex flex-col gap-2"}
+                 (for [[idx action] (map-indexed vector suggested-actions)]
+                   ($ suggested-action-button
+                      {:key idx
+                       :action action
+                       :executing? false
+                       :executed? false})))))
+
+         ;; User avatar
+         (when (= role "user")
+           ($ :div {:class "w-8 h-8 flex items-center justify-center border-2 border-foreground bg-card"}
+              ($ User {:size 20})))))))
 
 (defui ai-sidebar
   "AI Copilot sidebar - collapsible chat interface"

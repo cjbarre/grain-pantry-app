@@ -161,4 +161,76 @@
     height: 0;
     pointer-events: none;
   }
+
+  /* AI Chat Markdown Styles */
+  .prose {
+    @apply text-foreground;
+  }
+
+  .prose strong {
+    @apply text-foreground font-normal;
+    font-weight: 400;
+  }
+
+  .prose em {
+    @apply text-foreground;
+    font-style: italic;
+  }
+
+  .prose code {
+    @apply bg-muted text-foreground px-1 py-0.5 border-2 border-border;
+    font-size: 0.9em;
+  }
+
+  .prose pre {
+    @apply bg-muted border-2 border-border p-3 overflow-x-auto;
+  }
+
+  .prose pre code {
+    @apply bg-transparent border-0 p-0;
+  }
+
+  .prose ul, .prose ol {
+    @apply my-2 pl-6;
+  }
+
+  .prose li {
+    @apply my-1;
+  }
+
+  .prose ul > li::marker {
+    @apply text-primary;
+  }
+
+  .prose ol > li::marker {
+    @apply text-primary;
+  }
+
+  .prose p {
+    @apply my-2;
+  }
+
+  .prose a {
+    @apply text-primary underline;
+  }
+
+  .prose blockquote {
+    @apply border-l-4 border-primary pl-3 italic my-2;
+  }
+
+  .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+    @apply text-foreground font-normal mt-3 mb-2;
+  }
+
+  .prose h1 {
+    font-size: 1.5em;
+  }
+
+  .prose h2 {
+    font-size: 1.3em;
+  }
+
+  .prose h3 {
+    font-size: 1.1em;
+  }
 }

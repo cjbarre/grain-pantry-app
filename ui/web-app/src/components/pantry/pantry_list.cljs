@@ -195,6 +195,12 @@
                                  :type "button"
                                  :on-click #(rf/dispatch [::pantry-events/set-form-field :expires ""])}
                                 "None"))
+                          ($ :div {:class "space-y-2"}
+                             ($ label/Label {:for "custom-expires"} "Or enter custom date")
+                             ($ input/Input {:id "custom-expires"
+                                            :placeholder "MM-DD-YYYY"
+                                            :value new-item-expires
+                                            :on-change #(rf/dispatch [::pantry-events/set-form-field :expires (.. % -target -value)])}))
                           (when (not-empty new-item-expires)
                             ($ :p {:class "text-sm text-muted-foreground"}
                                "Expires: " new-item-expires))))))))

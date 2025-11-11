@@ -9,9 +9,9 @@
   --font-mono: 'VT323', monospace;
   --background: oklch(0.97 0.01 85);
   --foreground: oklch(0.45 0.18 265);
-  --card: oklch(1 0 0);
+  --card: oklch(0.94 0.008 85);
   --card-foreground: oklch(0.45 0.18 265);
-  --popover: oklch(1 0 0);
+  --popover: oklch(0.94 0.008 85);
   --popover-foreground: oklch(0.45 0.18 265);
   --primary: oklch(0.57 0.22 265);
   --primary-foreground: oklch(0.99 0 0);
@@ -32,7 +32,7 @@
   --chart-4: oklch(0.60 0.20 275);
   --chart-5: oklch(0.68 0.15 295);
   --radius: 0.25rem;
-  --sidebar: oklch(1 0 0);
+  --sidebar: oklch(0.94 0.008 85);
   --sidebar-foreground: oklch(0.45 0.18 265);
   --sidebar-primary: oklch(0.57 0.22 265);
   --sidebar-primary-foreground: oklch(0.99 0 0);
@@ -124,7 +124,7 @@
   }
 
   html {
-    font-size: 20px; /* VT323 looks better at larger sizes */
+    font-size: 22px; /* VT323 looks better at larger sizes */
   }
 
   body {
@@ -144,21 +144,6 @@
     letter-spacing: normal;
   }
 
-  /* Chunky borders for bold aesthetic */
-  [data-slot="card"],
-  [data-slot="button"],
-  input,
-  select,
-  textarea {
-    border-width: 2px !important;
-    border-radius: 0.25rem !important;
-  }
-
-  /* Even thicker for major containers */
-  [data-slot="card"] {
-    border-width: 3px !important;
-    border-radius: 0.25rem !important;
-  }
 
   /* TipTap editor styles */
   .ProseMirror {

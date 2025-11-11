@@ -12,7 +12,10 @@
             [store.core :as store]
             [store.auth.effects]
             [store.auth.events]
-            [store.auth.subs]))
+            [store.auth.subs]
+            [store.ai.effects]
+            [store.ai.events]
+            [store.ai.subs]))
 
 (defui app []
   ($ :<>
@@ -35,11 +38,11 @@
      root)))
 
 (defn ^:export init []
-  ;; Initialize si-frame store
-  (rf/dispatch-sync [::store/initialize])
-  (router/start-router!)
-  ;; Check authentication status on app startup using refactored auth
+  ;; Create API client and initialize store with it
   (let [api-client (api/->RemoteAPIClient {:base-url (config/api-base-url)})]
+    (rf/dispatch-sync [::store/initialize api-client])
+    (router/start-router!)
+    ;; Check authentication status on app startup using refactored auth
     (auth/check-auth-status! api-client))
   (render)) 
 

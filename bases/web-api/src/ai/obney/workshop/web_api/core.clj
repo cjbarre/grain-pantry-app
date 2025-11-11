@@ -17,6 +17,8 @@
             [ai.obney.workshop.pantry-service.interface :as pantry-service]
             [ai.obney.workshop.pantry-service.interface.schemas]
             [ai.obney.workshop.recipe-service.interface :as recipe-service]
+            [ai.obney.workshop.ai-agent-service.interface :as ai-agent-service]
+            [ai.obney.workshop.ai-agent-service.interface.schemas]
 
             [clojure.set :as set]
             [com.brunobonacci.mulog :as u]
@@ -63,7 +65,8 @@
 
    ::context {:event-store (ig/ref ::event-store)
               :command-registry (merge user-service/commands
-                                       pantry-service/commands)
+                                       pantry-service/commands
+                                       ai-agent-service/commands)
               :query-registry (merge user-service/queries
                                      pantry-service/queries
                                      recipe-service/queries)

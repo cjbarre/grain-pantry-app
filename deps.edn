@@ -33,9 +33,10 @@
 
                                ;; Services
                                poly/user-service                                {:local/root "components/user-service"}
-                               poly/pantry-service                                {:local/root "components/pantry-service"}
-                               poly/recipe-service                                {:local/root "components/recipe-service"}
-                               
+                               poly/pantry-service                              {:local/root "components/pantry-service"}
+                               poly/recipe-service                              {:local/root "components/recipe-service"}
+                               poly/ai-agent-service                            {:local/root "components/ai-agent-service"}
+
                                ;; Bases
                                poly/web-api                                     {:local/root "bases/web-api"}}}
 

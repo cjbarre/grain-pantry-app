@@ -17,9 +17,12 @@
                    :category ""
                    :expires ""
                    :expanded false
-                   :error false}}})
+                   :error false}}
+   :ai {:conversation []     ;; AI chat history
+        :loading false       ;; AI request in progress
+        :error nil}})
 
 (rf/reg-event-db
  ::initialize
- (fn [_ _]
-   (init-db)))
+ (fn [_ [_ api-client]]
+   (assoc (init-db) :api/client api-client)))

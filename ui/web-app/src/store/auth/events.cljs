@@ -54,7 +54,7 @@
     (cond-> {:db (-> db
                      (assoc-in [:auth :status] true)
                      (assoc-in [:auth :user] user))}
-      on-success (assoc ::router-fx/navigate {:route-name :home
+      on-success (assoc ::router-fx/navigate {:route-name :pantry
                                                :navigate-fn on-success}))))
 
 (rf/reg-event-db

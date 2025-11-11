@@ -1,0 +1,14 @@
+{:jwt-secret "LOCAL_ONLY"
+ :app-base "http://localhost:8080"
+ :webserver/http-port 8081
+ :env "dev"
+
+ ;; LocalStack Configuration
+ :localstack/enabled true
+ :localstack/endpoint "http://localhost:4566"
+
+ ;; AWS Configuration
+ :aws/region "us-east-1"
+ :kms-key-id "alias/grain-local-key"
+ :s3-bucket "grain-files"
+ :email-from "noreply@demo.net"}

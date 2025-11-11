@@ -1,0 +1,25 @@
+;; shadow-cljs configuration
+{:deps true
+
+ :dev-http {8080 "public"}
+
+ :builds
+ {:app
+  {:target :browser
+   :output-dir "public/js"
+   :asset-path "/js"
+   :modules {:main {:entries [app.core]
+                    :init-fn app.core/init}}
+   :devtools {:preloads [uix.preload devtools.preload]}
+   :dev {:compiler-options {:source-map true
+                           :optimizations :none}}
+   :release {:compiler-options {:optimizations :advanced
+                               :source-map false
+                               :elide-asserts true
+                               :pretty-print false}}
+   :js-options {:js-package-dirs    ["node_modules" "src/gen"]
+                ;; Use :es-unsupported to bypass Closure Compiler parsing of modern JS
+                ;; features like private class properties (#field) in Radix UI dependencies
+                :output-feature-set :es-unsupported
+                :language-in        :unsupported
+                :js-options {:resolve {"gen" "dist/gen"}}}}}}

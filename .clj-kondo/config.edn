@@ -1,0 +1,7 @@
+{:lint-as {ai.obney.grain.schema-util.interface/defschemas clojure.core/def
+           ai.obney.grain.clj-dspy.interface/defsignature clojure.core/def
+           ai.obney.grain.clj-dspy.interface/defmodel clojure.core/def
+           ai.obney.grain.clj-dspy.core/defsignature clojure.core/def
+           ai.obney.grain.clj-dspy.core/defmodel clojure.core/def
+           uix.core/defui clojure.core/defn}
+ :linters {:unresolved-namespace {:exclude [dspy]}}}

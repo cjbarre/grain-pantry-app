@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": false,
+    "outDir": "./src/gen",
+    "rootDir": "./src/js",
+    "esModuleInterop": true,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "baseUrl": "./",
+    "paths": {
+      "@/shadcn/*": ["./src/js/shadcn/*"],
+      "@/*": ["./src/js/*"]
+    },
+  },
+  "include": ["src/js/**/*.tsx", "src/js/**/*.ts", "src/js/**/*.jsx"],
+  "exclude": ["node_modules", "src/gen"]
+}

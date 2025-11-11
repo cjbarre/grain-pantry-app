@@ -1,0 +1,44 @@
+{:aliases  {:dev {:extra-paths ["development/src"]
+
+                  :extra-deps {org.clojure/clojure {:mvn/version "1.12.0"}
+
+                               clj-http/clj-http {:mvn/version "3.13.1"}
+
+                               obneyai/grain-core                               {:git/url "https://github.com/ObneyAI/grain.git"
+                                                                                 :sha "f36aa0111498bb6b563455d944c940993127577f"
+                                                                                 :deps/root "projects/grain-core"}
+
+                               obneyai/grain-event-store-postgres-v2            {:git/url "https://github.com/ObneyAI/grain.git"
+                                                                                 :sha "f36aa0111498bb6b563455d944c940993127577f"
+                                                                                 :deps/root "projects/grain-event-store-postgres-v2"}
+
+                               obneyai/grain-dspy-extensions                    {:git/url "https://github.com/ObneyAI/grain.git"
+                                                                                 :sha "f36aa0111498bb6b563455d944c940993127577f"
+                                                                                 :deps/root "projects/grain-dspy-extensions"}
+
+                               obneyai/grain-mulog-aws-cloudwatch-emf-publisher {:git/url "https://github.com/ObneyAI/grain.git"
+                                                                                 :sha "f36aa0111498bb6b563455d944c940993127577f"
+                                                                                 :deps/root "projects/grain-mulog-aws-cloudwatch-emf-publisher"}
+
+                               ;; Foundation Components
+                               poly/email                                       {:local/root "components/email"}
+                               poly/email-ses                                   {:local/root "components/email-ses"}
+                               poly/crypto                                      {:local/root "components/crypto"}
+                               poly/crypto-kms                                  {:local/root "components/crypto-kms"}
+                               poly/jwt                                         {:local/root "components/jwt"}
+                               poly/url-presigner                               {:local/root "components/url-presigner"}
+                               poly/url-presigner-aws                           {:local/root "components/url-presigner-aws"}
+                               poly/file-store                                  {:local/root "components/file-store"}
+                               poly/file-store-s3                               {:local/root "components/file-store-s3"}
+
+                               ;; Services
+                               poly/user-service                                {:local/root "components/user-service"}
+
+                               ;; Bases
+                               poly/web-api                                     {:local/root "bases/web-api"}}}
+
+            :test {:extra-paths []}
+
+            :poly {:main-opts ["-m" "polylith.clj.core.poly-cli.core"]
+                   :extra-deps {polylith/clj-poly {:mvn/version "0.2.22"}}}}}
+

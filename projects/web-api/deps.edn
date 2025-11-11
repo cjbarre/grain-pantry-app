@@ -1,0 +1,18 @@
+{:deps {org.clojure/clojure {:mvn/version "1.12.0"}
+        
+        web-api/web-api {:local/root "../../bases/web-api"}
+        web-api/user-service {:local/root "../../components/user-service"}
+
+        web-api/crypto {:local/root "../../components/crypto"}
+        web-api/crypto-kms {:local/root "../../components/crypto-kms"}
+        web-api/email {:local/root "../../components/email"}
+        web-api/email-kms {:local/root "../../components/email-ses"}
+        web-api/jwt {:local/root "../../components/jwt"}
+        web-api/url-presigner {:local/root "../../components/url-presigner"}
+        web-api/url-presigner-aws {:local/root "../../components/url-presigner-aws"}
+        web-api/file-store {:local/root "../../components/file-store"}
+        web-api/file-store-s3 {:local/root "../../components/file-store-s3"}}
+
+ :aliases {:run {:main-opts ["--main" "ai.obney.workshop.web-api.core"]}
+           :test {:extra-paths []
+                  :extra-deps  {}}}}

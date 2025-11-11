@@ -8,9 +8,9 @@ The Polylith documentation can be found here:
 
 You can also get in touch with the Polylith Team on [Slack](https://clojurians.slack.com/archives/C013B7MQHJQ).
 
-<h1>workshop-template</h1>
+<h1>Grain Pantry App</h1>
 
-# ObneyAI Application Template
+This project is an end-to-end example of building an event-sourced application with agentic features and AI integration using the [Grain](https://github.com/ObneyAI/grain) framework from ObneyAI.
 
 # Dependencies
 - Clojure

@@ -11,4 +11,7 @@
  :aws/region "us-east-1"
  :kms-key-id "alias/grain-local-key"
  :s3-bucket "grain-files"
- :email-from "noreply@demo.net"}
+ :email-from "noreply@demo.net"
+
+ ;; AI Configuration
+ :openrouter-api-key "<your-key-here>"}

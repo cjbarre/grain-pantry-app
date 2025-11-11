@@ -20,10 +20,10 @@ WORKDIR /usr/src/app
 
 # Copy clojure code
 COPY . /usr/src/app/
-COPY python  /usr/src/app/projects/advising-hub/python
+COPY python  /usr/src/app/projects/web-api/python
 
 # Install clojure dependencies
-WORKDIR /usr/src/app/projects/advising-hub
+WORKDIR /usr/src/app/projects/web-api
 RUN clojure -P
 
 CMD ["clojure", "-M:run"]

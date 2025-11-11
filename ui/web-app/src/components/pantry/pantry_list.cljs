@@ -8,14 +8,14 @@
             ["/gen/shadcn/components/ui/badge" :as badge]
             ["/gen/shadcn/components/ui/input" :as input]
             ["/gen/shadcn/components/ui/label" :as label]
-            ["lucide-react" :refer [Plus Package Calendar]]
+            ["lucide-react" :refer [Plus Package Calendar Trash2]]
             [components.context.interface :as context]
             [store.pantry.events :as pantry-events]
             [store.pantry.subs :as pantry-subs]))
 
 (def categories ["All" "Dairy" "Grains" "Produce" "Meat" "Pantry"])
 
-(defui item-card [{:keys [name quantity category expires]}]
+(defui item-card [{:keys [id name quantity category expires on-delete]}]
   ($ card/Card {:class "relative"}
      ($ card/CardHeader
         ($ :div {:class "flex items-start justify-between"}
@@ -24,7 +24,13 @@
               ($ card/CardDescription {:class "flex items-center gap-2 mt-2"}
                  ($ Package {:size 14})
                  quantity))
-           ($ badge/Badge {:variant "outline"} category)))
+           ($ :div {:class "flex items-center gap-2"}
+              ($ badge/Badge {:variant "outline"} category)
+              ($ button/Button
+                 {:variant "ghost"
+                  :size "icon-sm"
+                  :on-click #(when on-delete (on-delete id))}
+                 ($ Trash2 {:size 16})))))
      ($ card/CardContent
         (when expires
           ($ :div {:class "flex items-center gap-2 text-sm text-muted-foreground"}
@@ -235,7 +241,9 @@
          ($ :div {:class "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"}
             (for [item filtered-items]
               ($ item-card {:key (:id item)
+                           :id (:id item)
                            :name (:name item)
                            :quantity (:quantity item)
                            :category (:category item)
-                           :expires (:expires item)})))))))
+                           :expires (:expires item)
+                           :on-delete #(rf/dispatch [::pantry-events/remove-pantry-item % api-client])})))))))

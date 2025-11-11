@@ -35,6 +35,17 @@
             (rf/dispatch (conj on-failure response))
             (rf/dispatch (conj on-success response))))))))
 
+(rf/reg-fx
+  ::remove-pantry-item
+  (fn [{:keys [item-id api-client on-success on-failure]}]
+    (when api-client
+      (go
+        (let [response (<! (api/command api-client {:command/name :pantry/remove-item
+                                                     :item-id item-id}))]
+          (if (anomaly? response)
+            (rf/dispatch (conj on-failure response))
+            (rf/dispatch on-success)))))))
+
 ;;
 ;; Shopping List Effects
 ;;

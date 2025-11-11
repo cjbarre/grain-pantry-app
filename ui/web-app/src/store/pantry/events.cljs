@@ -86,6 +86,35 @@
     db))
 
 ;;
+;; Remove Pantry Item
+;;
+
+(rf/reg-event-fx
+  ::remove-pantry-item
+  (fn [{:keys [db]} [_ item-id api-client]]
+    ;; Optimistically remove item from UI immediately
+    (let [updated-items (vec (remove #(= (:id %) item-id)
+                                     (get-in db [:pantry :items])))]
+      {:db (assoc-in db [:pantry :items] updated-items)
+       ::pantry-fx/remove-pantry-item {:item-id item-id
+                                        :api-client api-client
+                                        :on-success [::remove-pantry-item-success api-client]
+                                        :on-failure [::remove-pantry-item-failure api-client]}})))
+
+(rf/reg-event-db
+  ::remove-pantry-item-success
+  (fn [db [_ _api-client]]
+    ;; Item already removed optimistically, nothing to do
+    db))
+
+(rf/reg-event-fx
+  ::remove-pantry-item-failure
+  (fn [{:keys [db]} [_ api-client error]]
+    ;; On failure, refetch to restore correct state
+    {:db (assoc-in db [:pantry :error] error)
+     :dispatch [::fetch-pantry-items api-client]}))
+
+;;
 ;; Fetch Shopping List
 ;;
 

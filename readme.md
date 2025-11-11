@@ -12,10 +12,14 @@ You can also get in touch with the Polylith Team on [Slack](https://clojurians.s
 
 This project is an end-to-end example of building an event-sourced application with agentic features and AI integration using the [Grain](https://github.com/ObneyAI/grain) framework from ObneyAI.
 
+Note: This is an active WIP
+
 # Dependencies
 - Clojure
 - Babashka (optional)
 - NPM, Node, ETC
+- Open Router Key
+- Docker
 
 ## Python
 

@@ -2,6 +2,7 @@
   (:require [ai.obney.workshop.web-api.core :as service]
             [ai.obney.grain.event-store-v2.interface :as es]
             [ai.obney.grain.query-processor.interface :as qp]
+            [ai.obney.grain.command-processor.interface :as cp]
             [ai.obney.grain.time.interface :as time]))
 
 

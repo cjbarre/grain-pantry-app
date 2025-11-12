@@ -113,41 +113,58 @@
   "Initialize accumulators for iterative recipe search.
 
    Sets up short-term memory for accumulating unique recipes across
-   multiple search iterations."
+   multiple search iterations.
+
+   Note: previous_recipes starts as nil (not []) to signal to DSPy that
+   no filtering is needed on first attempt."
   [{:keys [st-memory]}]
   (swap! st-memory assoc
          :filtered-recipes []
+         :previous_recipes nil  ;; nil = no previous recipes yet
          :search-page 0)
-  (μ/log ::recipe-search-initialized)
+  (μ/log ::recipe-search-initialized
+         :filtered-recipes-count 0
+         :previous-recipes nil
+         :search-page 0)
   bt/success)
 
 (defn search-brave-for-recipes
-  "Search Brave Search API for recipes based on pantry items.
+  "Search Brave Search API for recipes with varied query strategies.
 
-   Reads pantry context and search-page from short-term memory and executes
-   web search using top ingredients. Uses offset for pagination across multiple searches.
-   Stores raw search results in short-term memory."
+   Strategy varies by search iteration:
+   - Page 0: Basic ingredient search, prioritizes expiring items if available
+   - Page 1: Cuisine-focused search with random cuisine
+   - Page 2: Context-based search (meal type/method) with freshness filter
+
+   Reads pantry context and search-page from short-term memory.
+   Stores raw search results in short-term memory for DSPy processing."
   [{:keys [st-memory config]}]
   (try
     (let [pantry-items (get-in @st-memory [:pantry_context :items])
+          expiring-soon (get-in @st-memory [:pantry_context :expiring-soon])
           search-page (or (:search-page @st-memory) 0)
-          offset (* search-page 10)
           api-key (:brave-api-key config)]
 
       (when-not api-key
         (μ/log ::brave-api-key-missing :message "BRAVE_SEARCH_API_KEY not configured")
         (throw (ex-info "Brave Search API key not configured" {})))
 
-      ;; Extract ingredient names for search query
-      (let [ingredient-names (mapv :name (take 5 pantry-items))
+      ;; On first search (page 0), prioritize expiring items if available
+      ;; Otherwise use top 5 pantry items
+      (let [ingredient-names (if (and (zero? search-page) (seq expiring-soon))
+                              (mapv :name (take 3 expiring-soon))
+                              (mapv :name (take 5 pantry-items)))
+
+            prioritizing-expiring? (and (zero? search-page) (seq expiring-soon))
+
             _ (μ/log ::searching-recipes
                      :ingredients ingredient-names
-                     :page search-page
-                     :offset offset)
+                     :search-page search-page
+                     :prioritizing-expiring prioritizing-expiring?)
 
-            ;; Execute Brave Search with pagination
+            ;; Execute Brave Search with varied query strategy
             search-results (brave/search-recipes ingredient-names api-key
-                                                {:count 10 :offset offset})]
+                                                {:count 10 :search-page search-page})]
 
         ;; Store results in short-term memory for DSPy action
         (swap! st-memory assoc :search_results search-results)
@@ -155,7 +172,8 @@
 
         (μ/log ::recipes-found
                :count (count (get-in search-results [:web :results]))
-               :page search-page)
+               :search-page search-page
+               :query (get-in search-results [:query :original]))
         bt/success))
 
     (catch Exception e
@@ -387,12 +405,19 @@
   (try
     (let [new-recipes (:recipes @st-memory)
           existing-recipes (:filtered-recipes @st-memory)
-          accumulated (vec (concat existing-recipes new-recipes))]
+          accumulated (vec (concat existing-recipes new-recipes))
+
+          ;; Debug: log recipe IDs for tracking
+          new-ids (mapv :id new-recipes)
+          existing-ids (mapv :id existing-recipes)]
 
       (swap! st-memory assoc :filtered-recipes accumulated)
       (μ/log ::recipes-accumulated
              :new-count (count new-recipes)
-             :total-count (count accumulated))
+             :existing-count (count existing-recipes)
+             :total-count (count accumulated)
+             :new-ids new-ids
+             :existing-ids existing-ids)
       bt/success)
 
     (catch Exception e
@@ -405,6 +430,34 @@
   (swap! st-memory update :search-page (fnil inc 0))
   (μ/log ::search-page-incremented :page (:search-page @st-memory))
   bt/success)
+
+(defn prepare-previous-recipes
+  "Copy filtered-recipes into previous_recipes for DSPy input.
+
+   DSPy reads inputs from short-term memory based on signature schema.
+   This action ensures previous_recipes is available for semantic filtering.
+
+   IMPORTANT: Recipes must be stringified (UUIDs converted to strings) for
+   proper serialization to Python/DSPy.
+
+   If no filtered recipes exist yet, keeps previous_recipes as nil."
+  [{:keys [st-memory]}]
+  (let [filtered (or (:filtered-recipes @st-memory) [])]
+    (if (empty? filtered)
+      ;; No recipes yet - keep previous_recipes as nil/empty
+      (do
+        (μ/log ::previous-recipes-prepared
+               :count 0
+               :status "no-recipes-yet")
+        bt/success)
+      ;; Have recipes - stringify and pass to DSPy
+      (let [stringified (stringify-uuids filtered)]
+        (swap! st-memory assoc :previous_recipes stringified)
+        (μ/log ::previous-recipes-prepared
+               :count (count stringified)
+               :recipe-ids (mapv :id stringified)
+               :status "recipes-prepared")
+        bt/success))))
 
 (defn has-enough-recipes?
   "Condition that checks if we have at least 6 diverse recipes.
@@ -444,10 +497,12 @@
    6. Rank accumulated recipes by preferences (adjusts match-percent with preference bonuses)
    7. Persist suggestions to event store
 
-   The DSPy RecipeSearcher handles semantic deduplication by:
-   - Identifying similar recipes (e.g., 'Grilled Chicken' vs 'Pan-Seared Chicken')
-   - Selecting the best version from each group
-   - Avoiding recipes similar to previous_recipes from earlier searches
+   The DSPy RecipeSearcher handles RIGOROUS semantic deduplication:
+   - Aggressively filters similar recipes (e.g., ALL chicken prep methods grouped as 'chicken')
+   - Picks only the BEST recipe from each similarity group
+   - Enforces maximum diversity: different cuisines, proteins, methods, dish types
+   - Strictly avoids recipes similar to previous_recipes from earlier searches
+   - Goal: Return recipes so different they couldn't be grouped together
 
    Note: Order is important! Enrichment must run before ranking so match-percent
    is calculated and available as the base score."
@@ -463,39 +518,38 @@
 
    ;; 4. Iterative search with semantic filtering (up to 3 attempts)
    [:fallback
-    ;; Attempt 1: Search page 0 (no previous recipes)
+    ;; Attempt 1: Search page 0 (previous_recipes is [] from initialize)
     [:sequence
      [:action search-brave-for-recipes]
      [:action {:id :recipe-parser
                :signature #'sigs/RecipeSearcher
-               :operation :chain-of-thought
-               :inputs {:previous_recipes []}}
+               :operation :chain-of-thought}
       dspy]
      [:action keywordize-recipes]
      [:action accumulate-recipes]
      [:condition has-enough-recipes?]]
 
-    ;; Attempt 2: Search page 1 (pass accumulated recipes to avoid similar ones)
+    ;; Attempt 2: Search page 1 (copy accumulated recipes to previous_recipes)
     [:sequence
      [:action increment-search-page]
+     [:action prepare-previous-recipes]
      [:action search-brave-for-recipes]
      [:action {:id :recipe-parser
                :signature #'sigs/RecipeSearcher
-               :operation :chain-of-thought
-               :inputs {:previous_recipes [:from-memory :filtered-recipes]}}
+               :operation :chain-of-thought}
       dspy]
      [:action keywordize-recipes]
      [:action accumulate-recipes]
      [:condition has-enough-recipes?]]
 
-    ;; Attempt 3: Search page 2 (final attempt)
+    ;; Attempt 3: Search page 2 (final attempt with all accumulated recipes)
     [:sequence
      [:action increment-search-page]
+     [:action prepare-previous-recipes]
      [:action search-brave-for-recipes]
      [:action {:id :recipe-parser
                :signature #'sigs/RecipeSearcher
-               :operation :chain-of-thought
-               :inputs {:previous_recipes [:from-memory :filtered-recipes]}}
+               :operation :chain-of-thought}
       dspy]
      [:action keywordize-recipes]
      [:action accumulate-recipes]

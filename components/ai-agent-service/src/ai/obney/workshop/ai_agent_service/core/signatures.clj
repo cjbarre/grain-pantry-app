@@ -92,21 +92,53 @@
    - Estimate time (extract from description like '30 min', '1 hour', or estimate from complexity)
    - Estimate difficulty ('easy', 'medium', or 'hard' based on ingredients/steps)
 
-   IMPORTANT - Semantic Diversity Rules:
-   - Identify recipes that are SEMANTICALLY SIMILAR even if worded differently:
-     * Same dish with minor variations (e.g., 'Grilled Chicken Breast' vs 'Pan-Seared Chicken Breast')
-     * Same cuisine/style recipes (e.g., 'Classic Carbonara' vs 'Traditional Italian Carbonara')
-     * Different names for same recipe (e.g., 'Fried Rice' vs 'Chicken Fried Rice' with same ingredients)
-   - When you find similar recipes, pick the BEST one based on:
-     * Most complete recipe information (ingredients, instructions, time)
-     * Best match with user's pantry items
-     * Clearest and most detailed description
-   - If previous_recipes is provided, DO NOT return recipes semantically similar to those already found
-   - Aim for DIVERSE recipes across:
-     * Different cuisines (Italian, Asian, American, etc.)
-     * Different cooking methods (grilled, baked, fried, sautéed)
-     * Different main ingredients (chicken vs beef vs vegetarian)
-     * Different meal types (quick weeknight vs elaborate)
+   CRITICAL - Semantic Diversity Rules (STRICTLY ENFORCE):
+
+   BE VERY AGGRESSIVE about filtering similar recipes. When in doubt, treat recipes as similar and pick only ONE.
+
+   Recipes are SEMANTICALLY SIMILAR if they share ANY of these characteristics:
+
+   1. SAME CORE DISH with different variations:
+      * 'Grilled Chicken' vs 'Baked Chicken' vs 'Pan-Seared Chicken' → SAME (all basic chicken)
+      * 'Classic Carbonara' vs 'Traditional Carbonara' vs 'Easy Carbonara' → SAME
+      * 'Chocolate Chip Cookies' vs 'Chewy Chocolate Chip Cookies' → SAME
+      * 'Fried Rice' vs 'Chicken Fried Rice' vs 'Vegetable Fried Rice' → SAME (all fried rice variations)
+
+   2. SAME COOKING METHOD + PROTEIN:
+      * 'Grilled Salmon' vs 'Grilled Trout' → SIMILAR (both grilled fish)
+      * 'Baked Chicken Thighs' vs 'Baked Chicken Drumsticks' → SAME (both baked chicken parts)
+      * 'Stir-Fry Beef' vs 'Stir-Fry Pork' → SIMILAR (same technique, different meat)
+
+   3. SAME CUISINE + DISH TYPE:
+      * 'Italian Pasta Salad' vs 'Mediterranean Pasta Salad' → SIMILAR
+      * 'Chicken Tacos' vs 'Beef Tacos' vs 'Fish Tacos' → SIMILAR (all tacos)
+      * 'Tomato Soup' vs 'Creamy Tomato Soup' → SAME
+
+   4. REGIONAL VARIATIONS of the same dish:
+      * 'Thai Curry' vs 'Indian Curry' vs 'Japanese Curry' → SIMILAR (all curry-based)
+      * 'Mexican Rice' vs 'Spanish Rice' → SAME
+      * 'Greek Salad' vs 'Mediterranean Salad' → SIMILAR
+
+   When you identify similar recipes, pick ONLY ONE based on:
+   - Most complete information (ingredients + instructions + time)
+   - Best pantry match
+   - Clearest description
+
+   DISCARD ALL OTHERS in that similarity group. Do NOT return multiple variations.
+
+   If previous_recipes is provided, STRICTLY AVOID any recipe semantically similar to those.
+   Even if the new recipe seems slightly different, if it's in the same category, SKIP IT.
+
+   Your goal: Return recipes that are MAXIMALLY DIFFERENT from each other:
+   - Different cuisines (Italian vs Asian vs American vs Middle Eastern vs African)
+   - Different proteins (chicken vs beef vs fish vs vegetarian vs legumes)
+   - Different cooking methods (grilled vs baked vs fried vs raw vs slow-cooked)
+   - Different dish types (soup vs salad vs main course vs side dish vs dessert)
+   - Different flavor profiles (spicy vs mild vs sweet vs savory vs tangy)
+
+   FAIL-SAFE: If you find yourself returning 2+ recipes with the same primary ingredient
+   or cooking method, you are being TOO LENIENT. Pick only the best one and find something
+   completely different for the other slot.
 
    For AI reasoning:
    - Explain WHY this recipe is a good match for their pantry
@@ -119,17 +151,24 @@
    - Be encouraging but honest about missing ingredients
 
    Return:
-   - recipes: Array of structured recipe objects (aim for 5-10 DIVERSE recipes, not multiple versions of the same dish)
+   - recipes: Array of structured recipe objects (aim for 6-10 MAXIMALLY DIVERSE recipes)
    - reasoning_per_recipe: Map of recipe ID to reasoning string
 
-   IMPORTANT: Try to return AT LEAST 5 diverse recipes if the search results allow it.
-   Only return fewer if search results are genuinely limited or most recipes are similar.
+   STRICT REQUIREMENTS for your output:
+   1. Try to return AT LEAST 6 recipes if search results allow
+   2. Each recipe MUST be fundamentally different from all others:
+      - NO two recipes with the same primary protein (unless vastly different cuisines/methods)
+      - NO two recipes with the same cooking method (unless different cuisines/proteins)
+      - NO multiple variations of the same dish (carbonara, fried rice, tacos, etc.)
+   3. Maximum diversity across: cuisines, proteins, methods, dish types, flavor profiles
+   4. Only return fewer than 6 if search results genuinely lack diversity (after aggressive filtering)
 
    Only include recipes that:
    - Are actual cookable recipes (not recipe collections, blogs, or ads)
    - Match at least 40% of user's pantry ingredients OR require ≤3 additional common ingredients
    - Have enough information in search results to be useful
    - Are semantically DIFFERENT from previous_recipes and from each other
+   - Pass the diversity test: could not be grouped with any other returned recipe
 
    Be concise in reasoning (1-2 sentences max per recipe)."
 

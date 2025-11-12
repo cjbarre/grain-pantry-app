@@ -154,7 +154,8 @@
          ($ Bot {:size 24}))
 
       ;; Expanded state - full sidebar
-      ($ card/Card {:class "fixed right-4 top-20 bottom-4 w-96 flex flex-col z-50"}
+      ;; Mobile: full width with small margins, Desktop (lg): fixed 384px width
+      ($ card/Card {:class "fixed left-2 right-2 top-20 bottom-4 lg:left-auto lg:right-4 lg:w-96 flex flex-col z-50"}
          ($ card/CardHeader {:class "flex-row items-center justify-between pb-3 cursor-pointer"
                             :on-click handle-toggle}
             ($ :div {:class "flex items-center gap-2"}

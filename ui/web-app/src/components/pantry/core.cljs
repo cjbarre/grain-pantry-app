@@ -42,10 +42,10 @@
 (defui main []
   (let [[sidebar-collapsed set-sidebar-collapsed] (uix/use-state false)]
     ($ :div {:class "flex"}
-       ;; Main content with dynamic padding
+       ;; Main content with dynamic padding - only add margin on large screens
        ($ :div {:class (str "flex-1 transition-all duration-300 "
-                           (when-not sidebar-collapsed "mr-[25rem]"))}
-          ($ :div {:class "container mx-auto p-6 max-w-7xl"}
+                           (when-not sidebar-collapsed "lg:mr-[25rem]"))}
+          ($ :div {:class "container mx-auto p-4 sm:p-6 max-w-7xl"}
              ;; Header
              ($ :div {:class "mb-6"}
                 ($ :h1 {:class "text-3xl font-bold mb-2"} "Pantry Dashboard")

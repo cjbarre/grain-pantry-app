@@ -115,7 +115,10 @@
 
           (when-not can-make?
             ($ button/Button {:variant "outline"
-                              :title "Add missing items to shopping list"}
+                              :title "Add missing items to shopping list"
+                              :on-click #(do
+                                          (.stopPropagation %)
+                                          (rf/dispatch [::recipe-events/add-missing-items-to-shopping recipe api-client]))}
                ($ ShoppingCart {:size 16})))))))
 
 (defui view []

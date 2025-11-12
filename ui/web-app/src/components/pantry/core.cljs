@@ -40,7 +40,7 @@
             [components.ai.sidebar :as ai-sidebar]))
 
 (defui main []
-  (let [[sidebar-collapsed set-sidebar-collapsed] (uix/use-state false)]
+  (let [[sidebar-collapsed set-sidebar-collapsed] (uix/use-state true)]
     ($ :div {:class "flex"}
        ;; Main content with dynamic padding - only add margin on large screens
        ($ :div {:class (str "flex-1 transition-all duration-300 "

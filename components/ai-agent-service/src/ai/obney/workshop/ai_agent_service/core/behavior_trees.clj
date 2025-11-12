@@ -475,6 +475,81 @@
       bt/success
       bt/failure)))
 
+(def recipe-search-iteration-subtree
+  "Single search iteration: search → parse → keywordize → accumulate.
+
+   Designed to be run in a loop by search-recipes-until-enough action.
+   Each iteration:
+   1. Searches Brave API (query varies by search-page)
+   2. Parses with DSPy RecipeSearcher (filters against previous_recipes)
+   3. Converts string-keyed maps to keyword-keyed
+   4. Accumulates to filtered-recipes list
+   5. Increments search-page counter
+   6. Copies filtered-recipes to previous_recipes for next iteration"
+  [:sequence
+   [:action search-brave-for-recipes]
+   [:action {:id :recipe-parser
+             :signature #'sigs/RecipeSearcher
+             :operation :chain-of-thought}
+    dspy]
+   [:action keywordize-recipes]
+   [:action accumulate-recipes]
+   [:action increment-search-page]
+   [:action prepare-previous-recipes]])
+
+(defn search-recipes-until-enough
+  "Run search iterations until 6+ recipes found or max attempts reached.
+
+   Executes recipe-search-iteration-subtree in a loop, accumulating recipes
+   across iterations until threshold met.
+
+   The sub-tree shares event-store, auth-claims, config, and context from parent.
+   State is threaded through as a map that gets converted to an atom for each iteration."
+  [{:keys [st-memory event-store auth-claims config context]}]
+  (loop [attempts 0
+         accumulated-state @st-memory]
+
+    (let [current-count (count (:filtered-recipes accumulated-state))
+          max-attempts 5]
+
+      (cond
+        ;; Success: have enough recipes
+        (>= current-count 6)
+        (do
+          (reset! st-memory accumulated-state)
+          (μ/log ::search-loop-complete :attempts attempts :recipes current-count)
+          bt/success)
+
+        ;; Give up: hit max attempts
+        (>= attempts max-attempts)
+        (do
+          (reset! st-memory accumulated-state)
+          (μ/log ::search-loop-max-attempts :attempts attempts :recipes current-count)
+          bt/success)
+
+        ;; Continue: run another iteration
+        :else
+        (do
+          (μ/log ::search-iteration :attempt (inc attempts) :current-count current-count)
+
+          ;; Build sub-tree with accumulated state as MAP (converted to atom internally)
+          (let [sub-bt (bt/build recipe-search-iteration-subtree
+                                 {:event-store event-store
+                                  :auth-claims auth-claims
+                                  :st-memory accumulated-state
+                                  :config config
+                                  :context context})
+                result (bt/run sub-bt)]
+
+            (if (= result bt/success)
+              ;; Extract updated state and continue loop
+              (recur (inc attempts)
+                     @(get-in sub-bt [:context :st-memory]))
+              ;; Sub-tree failed, propagate failure
+              (do
+                (reset! st-memory accumulated-state)
+                bt/failure))))))))
+
 ;;
 ;; Behavior Trees
 ;;
@@ -486,13 +561,15 @@
    1. Initialize recipe search accumulators
    2. Load pantry context
    3. Load preference signals from events into short-term memory
-   4. Iteratively search and filter (up to 3 attempts):
-      a. Search Brave API for recipes (with pagination)
+   4. Loop search iterations until 6+ recipes or max attempts (5):
+      Each iteration runs recipe-search-iteration-subtree:
+      a. Search Brave API for recipes (varied query strategy per iteration)
       b. Parse with DSPy RecipeSearcher (semantic filtering against previous results)
       c. Keywordize recipe maps
       d. Accumulate unique recipes
-      e. Check if we have enough (6+) - if yes, proceed; if no, try again
-      f. Increment search page for next iteration
+      e. Increment search page for next iteration
+      f. Prepare previous_recipes for next DSPy filtering
+      Loop continues until 6+ recipes accumulated or 5 attempts exhausted.
    5. Enrich recipe ingredients with availability data (calculates match-percent)
    6. Rank accumulated recipes by preferences (adjusts match-percent with preference bonuses)
    7. Persist suggestions to event store
@@ -516,44 +593,8 @@
    ;; 3. Load preference signals into short-term memory
    [:action load-preference-signals]
 
-   ;; 4. Iterative search with semantic filtering (up to 3 attempts)
-   [:fallback
-    ;; Attempt 1: Search page 0 (previous_recipes is [] from initialize)
-    [:sequence
-     [:action search-brave-for-recipes]
-     [:action {:id :recipe-parser
-               :signature #'sigs/RecipeSearcher
-               :operation :chain-of-thought}
-      dspy]
-     [:action keywordize-recipes]
-     [:action accumulate-recipes]
-     [:condition has-enough-recipes?]]
-
-    ;; Attempt 2: Search page 1 (copy accumulated recipes to previous_recipes)
-    [:sequence
-     [:action increment-search-page]
-     [:action prepare-previous-recipes]
-     [:action search-brave-for-recipes]
-     [:action {:id :recipe-parser
-               :signature #'sigs/RecipeSearcher
-               :operation :chain-of-thought}
-      dspy]
-     [:action keywordize-recipes]
-     [:action accumulate-recipes]
-     [:condition has-enough-recipes?]]
-
-    ;; Attempt 3: Search page 2 (final attempt with all accumulated recipes)
-    [:sequence
-     [:action increment-search-page]
-     [:action prepare-previous-recipes]
-     [:action search-brave-for-recipes]
-     [:action {:id :recipe-parser
-               :signature #'sigs/RecipeSearcher
-               :operation :chain-of-thought}
-      dspy]
-     [:action keywordize-recipes]
-     [:action accumulate-recipes]
-     [:condition has-enough-recipes?]]]
+   ;; 4. Loop search iterations until 6+ recipes or max attempts (5)
+   [:action search-recipes-until-enough]
 
    ;; 5. Enrich ingredients with pantry availability (calculates match-percent)
    [:action enrich-recipe-ingredients]

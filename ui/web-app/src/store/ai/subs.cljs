@@ -16,3 +16,13 @@
   ::error
   (fn [db _]
     (get-in db [:ai :error] nil)))
+
+(rf/reg-sub
+  ::executing-batch
+  (fn [db _]
+    (get-in db [:ai :executing-batch] nil)))
+
+(rf/reg-sub
+  ::executed-batches
+  (fn [db _]
+    (get-in db [:ai :executed-batches] #{})))

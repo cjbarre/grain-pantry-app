@@ -83,7 +83,28 @@
                    #(rf/dispatch [::action-success normalized])
                    #(rf/dispatch [::action-failure normalized %])]}
 
-        ;; TODO: Add more action types (remove-pantry-item, move-to-pantry, etc.)
+        :remove-pantry-item
+        {:dispatch-n [[::pantry-events/remove-pantry-item
+                      (let [id (get params :item-id)]
+                        (if (string? id) (uuid id) id))
+                      api-client]
+                     [::action-success normalized]]}
+
+        :remove-shopping-item
+        {:dispatch-n [[::pantry-events/remove-shopping-item
+                      (let [id (get params :item-id)]
+                        (if (string? id) (uuid id) id))
+                      api-client]
+                     [::action-success normalized]]}
+
+        :move-to-pantry
+        {:dispatch-n [[::pantry-events/move-to-pantry
+                      (let [ids (get params :item-ids)]
+                        (if (every? string? ids)
+                          (mapv uuid ids)
+                          ids))
+                      api-client]
+                     [::action-success normalized]]}
 
         ;; Default: show error for unknown action type
         {:db (update-in db [:ai :conversation] (fnil conj [])
@@ -107,3 +128,131 @@
     (update-in db [:ai :conversation] (fnil conj [])
       {:role "system"
        :content (str "✗ Failed to " (:description action))})))
+
+;;
+;; Batch Action Execution
+;;
+
+(rf/reg-event-fx
+  ::execute-actions-batch
+  (fn [{:keys [db]} [_ actions message-idx]]
+    (if (empty? actions)
+      ;; No actions to execute
+      {:db db}
+      ;; Initialize batch execution state and start first action
+      (let [normalized-actions (mapv normalize-action actions)]
+        {:db (assoc-in db [:ai :executing-batch]
+               {:message-idx message-idx
+                :current-index 0
+                :total (count normalized-actions)
+                :actions normalized-actions
+                :status :executing})
+         :dispatch [::execute-batch-action 0]}))))
+
+(rf/reg-event-fx
+  ::execute-batch-action
+  (fn [{:keys [db]} [_ action-index]]
+    (let [batch-state (get-in db [:ai :executing-batch])
+          action (get-in batch-state [:actions action-index])
+          action-type (:type action)
+          params (:params action)
+          api-client (:api/client db)]
+
+      ;; Execute the action based on its type
+      (case action-type
+        :add-pantry-item
+        {:dispatch [::pantry-events/add-pantry-item
+                   params
+                   api-client
+                   #(rf/dispatch [::batch-action-completed action-index])
+                   #(rf/dispatch [::batch-action-failed action-index action %])]}
+
+        :add-shopping-item
+        {:dispatch [::pantry-events/add-shopping-item
+                   params
+                   api-client
+                   #(rf/dispatch [::batch-action-completed action-index])
+                   #(rf/dispatch [::batch-action-failed action-index action %])]}
+
+        :remove-pantry-item
+        ;; Note: remove-pantry-item event doesn't accept callbacks, so we dispatch completion immediately
+        ;; Parse string UUID to UUID object if needed
+        {:dispatch-n [[::pantry-events/remove-pantry-item
+                      (let [id (get params :item-id)]
+                        (if (string? id) (uuid id) id))
+                      api-client]
+                     [::batch-action-completed action-index]]}
+
+        :remove-shopping-item
+        {:dispatch-n [[::pantry-events/remove-shopping-item
+                      (let [id (get params :item-id)]
+                        (if (string? id) (uuid id) id))
+                      api-client]
+                     [::batch-action-completed action-index]]}
+
+        :move-to-pantry
+        {:dispatch-n [[::pantry-events/move-to-pantry
+                      (let [ids (get params :item-ids)]
+                        (if (every? string? ids)
+                          (mapv uuid ids)
+                          ids))
+                      api-client]
+                     [::batch-action-completed action-index]]}
+
+        ;; Default: unknown action type - treat as failure
+        {:dispatch [::batch-action-failed action-index action
+                   {:error "Unknown action type"}]}))))
+
+(rf/reg-event-fx
+  ::batch-action-completed
+  (fn [{:keys [db]} [_ action-index]]
+    (let [batch-state (get-in db [:ai :executing-batch])
+          total (:total batch-state)
+          next-index (inc action-index)]
+
+      (if (< next-index total)
+        ;; More actions to execute
+        {:db (assoc-in db [:ai :executing-batch :current-index] next-index)
+         :dispatch [::execute-batch-action next-index]}
+
+        ;; All actions completed successfully
+        {:dispatch [::batch-all-completed]}))))
+
+(rf/reg-event-fx
+  ::batch-action-failed
+  (fn [{:keys [db]} [_ action-index action _error]]
+    (let [batch-state (get-in db [:ai :executing-batch])
+          total (:total batch-state)
+          message-idx (:message-idx batch-state)]
+      {:db (-> db
+               ;; Clear batch execution state
+               (assoc-in [:ai :executing-batch] nil)
+               ;; Mark this message's actions as executed (even though failed)
+               (update-in [:ai :executed-batches] (fnil conj #{}) message-idx)
+               ;; Add failure message to conversation
+               (update-in [:ai :conversation] (fnil conj [])
+                 {:role "system"
+                  :content (str "✗ Failed at action " (inc action-index) "/" total ": "
+                               (:description action))}))
+       ;; Still refresh data in case some actions succeeded
+       :dispatch-n [[::pantry-events/fetch-pantry-items (:api/client db)]
+                    [::pantry-events/fetch-shopping-list (:api/client db)]]})))
+
+(rf/reg-event-fx
+  ::batch-all-completed
+  (fn [{:keys [db]} [_]]
+    (let [batch-state (get-in db [:ai :executing-batch])
+          total (:total batch-state)
+          message-idx (:message-idx batch-state)]
+      {:db (-> db
+               ;; Clear batch execution state
+               (assoc-in [:ai :executing-batch] nil)
+               ;; Mark this message's actions as executed
+               (update-in [:ai :executed-batches] (fnil conj #{}) message-idx)
+               ;; Add success message to conversation
+               (update-in [:ai :conversation] (fnil conj [])
+                 {:role "system"
+                  :content (str "✓ All " total " action" (when (> total 1) "s") " completed successfully")}))
+       ;; Refresh data once after all actions complete
+       :dispatch-n [[::pantry-events/fetch-pantry-items (:api/client db)]
+                    [::pantry-events/fetch-shopping-list (:api/client db)]]})))

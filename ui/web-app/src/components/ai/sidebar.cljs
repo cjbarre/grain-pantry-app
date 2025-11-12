@@ -3,34 +3,84 @@
   (:require [uix.core :as uix :refer [defui $ use-state use-effect use-ref]]
             [re-frame.core :as rf]
             [re-frame.uix :refer [use-subscribe]]
+            [clojure.string :as str]
             ["/gen/shadcn/components/ui/card" :as card]
             ["/gen/shadcn/components/ui/button" :as button]
             ["/gen/shadcn/components/ui/input" :as input]
-            ["lucide-react" :refer [Send Bot User ChevronRight ChevronDown]]
+            ["lucide-react" :refer [Send Bot User ChevronRight]]
             ["marked" :as marked]
             [store.ai.subs :as ai-subs]
             [store.ai.events :as ai-events]))
 
-(defui suggested-action-button
-  "Button for executing AI-suggested actions"
-  [{:keys [action executing? executed?]}]
-  ($ button/Button
-     {:on-click #(rf/dispatch [::ai-events/execute-suggested-action action])
-      :disabled (or executing? executed?)
-      :variant "outline"
-      :size "sm"
-      :class "mt-2 w-full justify-start text-left h-auto min-h-[2rem] whitespace-normal"}
-     ($ :div {:class "flex items-start gap-2 w-full py-1"}
-        (when executed?
-          ($ :span {:class "shrink-0 mt-0.5"} "✓ "))
-        ($ :span {:class "flex-1 break-words"}
-           (get action "description" (:description action)))
-        (when executing?
-          ($ :span {:class "shrink-0 animate-pulse"} "...")))))
+(defn- get-action-description
+  "Extract description from action (handles both string and keyword keys)"
+  [action]
+  (get action "description" (:description action)))
+
+(defn- build-action-summary
+  "Build a compact summary of actions for display"
+  [actions]
+  (let [count (count actions)
+        descriptions (map get-action-description actions)
+        ;; Take first 2 descriptions, truncate if needed
+        preview (take 2 descriptions)
+        preview-str (str/join ", " preview)
+        remaining (- count 2)]
+    (if (> remaining 0)
+      (str count " actions: " preview-str ", and " remaining " more...")
+      (str count " action" (when (> count 1) "s") ": " preview-str))))
+
+(defui suggested-actions-batch
+  "Batch action execution component with compact summary and single confirm button"
+  [{:keys [actions message-idx]}]
+  (let [executing-batch (use-subscribe [::ai-subs/executing-batch])
+        executed-batches (use-subscribe [::ai-subs/executed-batches])
+
+        is-executing? (and executing-batch
+                          (= (:message-idx executing-batch) message-idx))
+        is-executed? (contains? executed-batches message-idx)
+
+        current-idx (when is-executing? (:current-index executing-batch))
+        total (when is-executing? (:total executing-batch))
+        current-action (when (and is-executing? current-idx)
+                        (get-in executing-batch [:actions current-idx]))
+
+        summary (build-action-summary actions)
+
+        handle-confirm (fn []
+                        (when-not is-executed?
+                          (rf/dispatch [::ai-events/execute-actions-batch actions message-idx])))]
+
+    ($ :div {:class "mt-3 border border-border bg-muted/30 p-3"}
+       ;; Summary or progress
+       (if is-executing?
+         ;; Show progress during execution
+         ($ :div {:class "text-sm mb-2"}
+            ($ :span {:class "text-muted-foreground"}
+               (str "Executing " (inc current-idx) "/" total ": "))
+            ($ :span {:class "font-medium"}
+               (get-action-description current-action))
+            ($ :span {:class "ml-2 animate-pulse"} "..."))
+
+         ;; Show summary when idle
+         ($ :div {:class "text-sm text-muted-foreground mb-2"}
+            summary))
+
+       ;; Confirm button
+       ($ button/Button
+          {:on-click handle-confirm
+           :disabled (or is-executing? is-executed?)
+           :variant (if is-executed? "outline" "default")
+           :size "sm"
+           :class "w-full"}
+          (cond
+            is-executing? "Executing..."
+            is-executed? "✓ Completed"
+            :else "Confirm All")))))
 
 (defui chat-message
   "Individual chat message component"
-  [{:keys [role content suggested-actions]}]
+  [{:keys [role content suggested-actions message-idx]}]
   (let [rendered-html (when (= role "assistant")
                         (marked/parse content #js {:breaks true :gfm true}))]
     (cond
@@ -60,15 +110,11 @@
                        :dangerouslySetInnerHTML #js {:__html rendered-html}})
               ($ :div content))
 
-            ;; Suggested actions (only for assistant messages)
+            ;; Suggested actions batch (only for assistant messages)
             (when (and (= role "assistant") (seq suggested-actions))
-              ($ :div {:class "mt-3 flex flex-col gap-2"}
-                 (for [[idx action] (map-indexed vector suggested-actions)]
-                   ($ suggested-action-button
-                      {:key idx
-                       :action action
-                       :executing? false
-                       :executed? false})))))
+              ($ suggested-actions-batch
+                 {:actions suggested-actions
+                  :message-idx message-idx})))
 
          ;; User avatar
          (when (= role "user")
@@ -129,6 +175,7 @@
                     (for [[idx msg] (map-indexed vector conversation)]
                       ($ chat-message
                          {:key idx
+                          :message-idx idx
                           :role (:role msg)
                           :content (:content msg)
                           :suggested-actions (:suggested-actions msg)}))

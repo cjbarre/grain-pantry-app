@@ -109,14 +109,29 @@
 ;; Recipe Search Actions
 ;;
 
+(defn initialize-recipe-search
+  "Initialize accumulators for iterative recipe search.
+
+   Sets up short-term memory for accumulating unique recipes across
+   multiple search iterations."
+  [{:keys [st-memory]}]
+  (swap! st-memory assoc
+         :filtered-recipes []
+         :search-page 0)
+  (μ/log ::recipe-search-initialized)
+  bt/success)
+
 (defn search-brave-for-recipes
   "Search Brave Search API for recipes based on pantry items.
 
-   Reads pantry context from short-term memory and executes web search
-   using top ingredients. Stores raw search results in short-term memory."
+   Reads pantry context and search-page from short-term memory and executes
+   web search using top ingredients. Uses offset for pagination across multiple searches.
+   Stores raw search results in short-term memory."
   [{:keys [st-memory config]}]
   (try
     (let [pantry-items (get-in @st-memory [:pantry_context :items])
+          search-page (or (:search-page @st-memory) 0)
+          offset (* search-page 10)
           api-key (:brave-api-key config)]
 
       (when-not api-key
@@ -125,16 +140,22 @@
 
       ;; Extract ingredient names for search query
       (let [ingredient-names (mapv :name (take 5 pantry-items))
-            _ (μ/log ::searching-recipes :ingredients ingredient-names)
+            _ (μ/log ::searching-recipes
+                     :ingredients ingredient-names
+                     :page search-page
+                     :offset offset)
 
-            ;; Execute Brave Search
-            search-results (brave/search-recipes ingredient-names api-key {:count 10})]
+            ;; Execute Brave Search with pagination
+            search-results (brave/search-recipes ingredient-names api-key
+                                                {:count 10 :offset offset})]
 
         ;; Store results in short-term memory for DSPy action
         (swap! st-memory assoc :search_results search-results)
         (swap! st-memory assoc :pantry_items pantry-items)
 
-        (μ/log ::recipes-found :count (count (get-in search-results [:web :results])))
+        (μ/log ::recipes-found
+               :count (count (get-in search-results [:web :results]))
+               :page search-page)
         bt/success))
 
     (catch Exception e
@@ -204,15 +225,19 @@
       bt/failure)))
 
 (defn rank-recipes-by-preferences
-  "Rank recipes based on preference signals.
+  "Rank recipes based on ingredient match and preference signals.
 
-   Adjusts match scores based on user's past interactions:
+   Uses match-percent (calculated by enrichment) as the base score,
+   then adjusts based on user's past interactions:
    - Cooked recipes: +30 points
    - Viewed recipes: +10 points
-   - Dismissed recipes: -20 points"
+   - Dismissed recipes: -20 points
+
+   IMPORTANT: This must run AFTER enrich-recipe-ingredients so that
+   match-percent is available as the base score."
   [{:keys [st-memory]}]
   (try
-    (let [recipes (:recipes @st-memory)
+    (let [recipes (:filtered-recipes @st-memory)
           reasoning (:reasoning_per_recipe @st-memory)
           preference-signals (:preference_signals @st-memory)
 
@@ -224,7 +249,11 @@
           ranked-recipes (mapv
                           (fn [recipe]
                             (let [recipe-id (:id recipe)
-                                  base-score (or (:match-score recipe) 50)
+                                  ;; Use match-percent (from enrichment) as base score
+                                  ;; Fall back to match-score (from DSPy) or 50 if neither exists
+                                  base-score (or (:match-percent recipe)
+                                                (:match-score recipe)
+                                                50)
 
                                   ;; Adjust score based on preference signals
                                   score (cond-> base-score
@@ -243,7 +272,7 @@
           ;; Sort by match score (highest first)
           sorted-recipes (vec (sort-by :match-score > ranked-recipes))]
 
-      (swap! st-memory assoc :recipes sorted-recipes)
+      (swap! st-memory assoc :filtered-recipes sorted-recipes)
       (μ/log ::recipes-ranked :count (count sorted-recipes))
       bt/success)
 
@@ -261,7 +290,7 @@
    how many ingredients the user already has."
   [{:keys [st-memory]}]
   (try
-    (let [recipes (:recipes @st-memory)
+    (let [recipes (:filtered-recipes @st-memory)
           pantry-items (get-in @st-memory [:pantry_context :items])
 
           ;; Build set of available ingredient names (lowercase for matching)
@@ -298,7 +327,7 @@
                     recipe))
                 recipes)]
 
-      (swap! st-memory assoc :recipes enriched-recipes)
+      (swap! st-memory assoc :filtered-recipes enriched-recipes)
       (μ/log ::ingredients-enriched
              :count (count enriched-recipes)
              :available-ingredients (count available-set))
@@ -312,7 +341,7 @@
   "Persist recipe search and suggestion events to event store."
   [{:keys [event-store st-memory auth-claims]}]
   (try
-    (let [recipes (:recipes @st-memory)
+    (let [recipes (:filtered-recipes @st-memory)
           search-results (:search_results @st-memory)
           household-id (:household-id auth-claims)
           query (get-in search-results [:query :original])
@@ -348,48 +377,137 @@
       (μ/log ::persist-failed :exception e)
       bt/failure)))
 
+(defn accumulate-recipes
+  "Accumulate newly found recipes into filtered-recipes accumulator.
+
+   Takes recipes from the current DSPy parsing and adds them to the
+   filtered-recipes list. The DSPy signature handles semantic deduplication
+   against previous_recipes, so we simply append the new recipes."
+  [{:keys [st-memory]}]
+  (try
+    (let [new-recipes (:recipes @st-memory)
+          existing-recipes (:filtered-recipes @st-memory)
+          accumulated (vec (concat existing-recipes new-recipes))]
+
+      (swap! st-memory assoc :filtered-recipes accumulated)
+      (μ/log ::recipes-accumulated
+             :new-count (count new-recipes)
+             :total-count (count accumulated))
+      bt/success)
+
+    (catch Exception e
+      (μ/log ::accumulate-failed :exception e)
+      bt/failure)))
+
+(defn increment-search-page
+  "Increment the search page counter for next Brave API call."
+  [{:keys [st-memory]}]
+  (swap! st-memory update :search-page (fnil inc 0))
+  (μ/log ::search-page-incremented :page (:search-page @st-memory))
+  bt/success)
+
+(defn has-enough-recipes?
+  "Condition that checks if we have at least 6 diverse recipes.
+
+   Returns success if filtered-recipes contains 6 or more recipes,
+   failure otherwise (triggering next search iteration).
+
+   Note: Target is 6 to ensure a good selection while avoiding
+   unnecessary API calls. System will return whatever it finds
+   after 3 search attempts, even if less than 6."
+  [{:keys [st-memory]}]
+  (let [recipe-count (count (:filtered-recipes @st-memory))]
+    (μ/log ::checking-recipe-count :count recipe-count :target 6)
+    (if (>= recipe-count 6)
+      bt/success
+      bt/failure)))
+
 ;;
 ;; Behavior Trees
 ;;
 
 (def recipe-search-tree
-  "Behavior tree for AI-powered recipe search.
+  "Behavior tree for AI-powered recipe search with semantic diversity filtering.
 
    Flow:
-   1. Load pantry context (existing action)
-   2. Load preference signals from events into short-term memory
-   3. Search Brave API for recipes
-   4. Parse results with DSPy RecipeSearcher
-   5. Keywordize recipe maps (convert string keys to keyword keys)
-   6. Rank recipes by preferences
-   7. Enrich recipe ingredients with availability data
-   8. Persist suggestions to event store"
+   1. Initialize recipe search accumulators
+   2. Load pantry context
+   3. Load preference signals from events into short-term memory
+   4. Iteratively search and filter (up to 3 attempts):
+      a. Search Brave API for recipes (with pagination)
+      b. Parse with DSPy RecipeSearcher (semantic filtering against previous results)
+      c. Keywordize recipe maps
+      d. Accumulate unique recipes
+      e. Check if we have enough (6+) - if yes, proceed; if no, try again
+      f. Increment search page for next iteration
+   5. Enrich recipe ingredients with availability data (calculates match-percent)
+   6. Rank accumulated recipes by preferences (adjusts match-percent with preference bonuses)
+   7. Persist suggestions to event store
+
+   The DSPy RecipeSearcher handles semantic deduplication by:
+   - Identifying similar recipes (e.g., 'Grilled Chicken' vs 'Pan-Seared Chicken')
+   - Selecting the best version from each group
+   - Avoiding recipes similar to previous_recipes from earlier searches
+
+   Note: Order is important! Enrichment must run before ranking so match-percent
+   is calculated and available as the base score."
   [:sequence
-   ;; 1. Load pantry context
+   ;; 1. Initialize accumulators
+   [:action initialize-recipe-search]
+
+   ;; 2. Load pantry context
    [:action load-pantry-context]
 
-   ;; 2. Load preference signals into short-term memory
+   ;; 3. Load preference signals into short-term memory
    [:action load-preference-signals]
 
-   ;; 3. Search Brave API
-   [:action search-brave-for-recipes]
+   ;; 4. Iterative search with semantic filtering (up to 3 attempts)
+   [:fallback
+    ;; Attempt 1: Search page 0 (no previous recipes)
+    [:sequence
+     [:action search-brave-for-recipes]
+     [:action {:id :recipe-parser
+               :signature #'sigs/RecipeSearcher
+               :operation :chain-of-thought
+               :inputs {:previous_recipes []}}
+      dspy]
+     [:action keywordize-recipes]
+     [:action accumulate-recipes]
+     [:condition has-enough-recipes?]]
 
-   ;; 4. Parse with DSPy RecipeSearcher
-   [:action {:id :recipe-parser
-             :signature #'sigs/RecipeSearcher
-             :operation :chain-of-thought}
-    dspy]
+    ;; Attempt 2: Search page 1 (pass accumulated recipes to avoid similar ones)
+    [:sequence
+     [:action increment-search-page]
+     [:action search-brave-for-recipes]
+     [:action {:id :recipe-parser
+               :signature #'sigs/RecipeSearcher
+               :operation :chain-of-thought
+               :inputs {:previous_recipes [:from-memory :filtered-recipes]}}
+      dspy]
+     [:action keywordize-recipes]
+     [:action accumulate-recipes]
+     [:condition has-enough-recipes?]]
 
-   ;; 5. Keywordize recipe maps (DSPy returns string keys)
-   [:action keywordize-recipes]
+    ;; Attempt 3: Search page 2 (final attempt)
+    [:sequence
+     [:action increment-search-page]
+     [:action search-brave-for-recipes]
+     [:action {:id :recipe-parser
+               :signature #'sigs/RecipeSearcher
+               :operation :chain-of-thought
+               :inputs {:previous_recipes [:from-memory :filtered-recipes]}}
+      dspy]
+     [:action keywordize-recipes]
+     [:action accumulate-recipes]
+     [:condition has-enough-recipes?]]]
 
-   ;; 6. Rank by preferences
-   [:action rank-recipes-by-preferences]
-
-   ;; 7. Enrich ingredients with pantry availability
+   ;; 5. Enrich ingredients with pantry availability (calculates match-percent)
    [:action enrich-recipe-ingredients]
 
-   ;; 8. Persist to event store
+   ;; 6. Rank accumulated recipes by preferences (uses match-percent as base)
+   [:action rank-recipes-by-preferences]
+
+   ;; 7. Persist to event store
    [:action persist-recipe-suggestions]])
 
 (def pantry-copilot-tree

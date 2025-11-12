@@ -96,10 +96,10 @@
 
         (if (= result bt/success)
           ;; Success: extract recipes from behavior tree memory
-          (let [recipes (-> bt :context :st-memory deref :recipes)]
+          (let [recipes (-> bt :context :st-memory deref :filtered-recipes)]
             {:command/result
              {:recipes recipes
-              :reasoning (str "Found " (count recipes) " recipes based on your pantry ingredients")}})
+              :reasoning (str "Found " (count recipes) " semantically diverse recipes based on your pantry ingredients")}})
 
           ;; Failure: tree execution failed
           {::anom/category ::anom/fault

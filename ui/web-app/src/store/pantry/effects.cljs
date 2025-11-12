@@ -117,17 +117,3 @@
           (if (anomaly? response)
             (rf/dispatch (conj on-failure response))
             (rf/dispatch (conj on-success response))))))))
-
-;;
-;; Recipe Matching Effects
-;;
-
-(rf/reg-fx
-  ::fetch-recipe-matches
-  (fn [{:keys [api-client on-success on-failure]}]
-    (when api-client
-      (go
-        (let [response (<! (api/query api-client {:query/name :recipes/match-pantry}))]
-          (if (anomaly? response)
-            (rf/dispatch (conj on-failure response))
-            (rf/dispatch (conj on-success response))))))))

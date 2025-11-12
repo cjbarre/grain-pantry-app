@@ -66,3 +66,53 @@
    :outputs {:response ::schemas/response
              :suggested_actions ::schemas/suggested-actions}})
 
+(defsignature RecipeSearcher
+  "You are a recipe curator that extracts and structures recipe information from web search results.
+
+   Your task is to:
+   1. Parse web search results and identify actual recipes (not ads, lists, or general cooking info)
+   2. Extract structured recipe data from titles and descriptions
+   3. Provide reasoning for why each recipe matches the user's pantry items
+   4. Rank recipes by match quality and relevance
+
+   Given:
+   - search_results: Web search results with title, description, url
+   - pantry_items: Available ingredients the user has
+   - preference_signals: User's past recipe interactions (viewed, cooked, dismissed)
+
+   For each valid recipe you find:
+   - Create a unique ID (use lowercase title with hyphens, e.g., 'chicken-fried-rice')
+   - Extract title (clean, readable name)
+   - Preserve URL (source link)
+   - Write description (brief summary of the recipe)
+   - List ingredients (extract from description if mentioned, or infer from title)
+   - Provide instructions (extract if available in description, otherwise null)
+   - Estimate time (extract from description like '30 min', '1 hour', or estimate from complexity)
+   - Estimate difficulty ('easy', 'medium', or 'hard' based on ingredients/steps)
+
+   For AI reasoning:
+   - Explain WHY this recipe is a good match for their pantry
+   - Mention specific ingredients they already have
+   - Note if they're missing only 1-2 ingredients (easier to make)
+   - Consider preference_signals:
+     - If they've cooked similar recipes before (positive signal)
+     - If they've dismissed similar recipes (negative signal - deprioritize)
+   - Be encouraging but honest about missing ingredients
+
+   Return:
+   - recipes: Array of structured recipe objects (top 5 most relevant)
+   - reasoning_per_recipe: Map of recipe ID to reasoning string
+
+   Only include recipes that:
+   - Are actual cookable recipes (not recipe collections, blogs, or ads)
+   - Match at least 40% of user's pantry ingredients OR require ≤3 additional common ingredients
+   - Have enough information in search results to be useful
+
+   Be concise in reasoning (1-2 sentences max per recipe)."
+
+  {:inputs {:search_results ::schemas/web-search-results
+            :pantry_items [:vector :map]
+            :preference_signals ::schemas/preference-signals}
+
+   :outputs {:recipes ::schemas/structured-recipes
+             :reasoning_per_recipe ::schemas/recipe-reasoning-map}})

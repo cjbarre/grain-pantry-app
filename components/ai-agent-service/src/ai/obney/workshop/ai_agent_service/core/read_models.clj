@@ -25,3 +25,39 @@
         acc))
     initial-state
     events))
+
+(defn preference-signals-read-model
+  "Build user recipe preference signals from interaction events.
+
+   Tracks:
+   - Viewed recipes (user clicked on recipe)
+   - Cooked recipes (user marked as cooked)
+   - Dismissed recipes (user dismissed recipe)
+
+   Returns map with:
+   {:viewed-recipes [recipe-id ...]
+    :cooked-recipes [recipe-id ...]
+    :dismissed-recipes [recipe-id ...]}"
+  [initial-state events]
+  (reduce
+    (fn [acc {:keys [event/type event/body] :as event}]
+      (case type
+        :ai/recipe-viewed
+        (update acc :viewed-recipes (fnil conj [])
+          (:recipe-id body))
+
+        :ai/recipe-marked-cooked
+        (update acc :cooked-recipes (fnil conj [])
+          (:recipe-id body))
+
+        :ai/recipe-dismissed
+        (update acc :dismissed-recipes (fnil conj [])
+          (:recipe-id body))
+
+        ;; Default: pass through unchanged
+        acc))
+    (merge {:viewed-recipes []
+            :cooked-recipes []
+            :dismissed-recipes []}
+           initial-state)
+    events))

@@ -60,10 +60,13 @@
    ::event-pubsub {:type :core-async
                    :topic-fn :event/type}
 
+   ::dspy {}
+
    ::todo-processors {:event-pubsub (ig/ref ::event-pubsub)
                       :context (ig/ref ::context)}
 
    ::context {:event-store (ig/ref ::event-store)
+              :dspy (ig/ref ::dspy)  ; Ensure DSPy is initialized before context
               :command-registry (merge user-service/commands
                                        pantry-service/commands
                                        ai-agent-service/commands)
@@ -90,9 +93,7 @@
                 ::http/port (:webserver/http-port env)
                 ::http/join? false
                 ::http/allowed-origins {:allowed-origins (constantly true)
-                                        :creds true}}
-
-   ::dspy {}})
+                                        :creds true}}})
 
 ;; -------------- ;;
 ;; Integrant Keys ;;
@@ -130,13 +131,31 @@
   (stop-fn))
 
 (defmethod ig/init-key ::dspy [_ _]
-  (let [lm (dspy/LM "openai/anthropic/claude-sonnet-4.5"
-                    :api_key (:openrouter-api-key env)
-                    :cache false
-                    :api_base "https://openrouter.ai/api/v1"
-                    :max_tokens 8000)]
+  (let [provider (or (:llm-provider env) "openai/gpt-4o-mini")
+        api-key (or (:openrouter-api-key env)
+                    (:openai-api-key env))
+        api-base (or (:openrouter-api-base env)
+                     "https://openrouter.ai/api/v1")]
 
-    (dspy/configure :lm lm)))
+    (when-not api-key
+      (throw (ex-info "No LLM API key found in config.edn. Set :openrouter-api-key or :openai-api-key"
+                      {:provider provider})))
+
+    (let [lm (if (:openrouter-api-key env)
+               ;; OpenRouter configuration
+               (dspy/LM provider
+                        :api_key api-key
+                        :api_base api-base
+                        :cache false)
+               ;; Direct OpenAI configuration
+               (dspy/LM provider
+                        :api_key api-key
+                        :cache false))]
+
+      (dspy/configure :lm lm)
+      (println (str "✅ DSPy configured with provider: " provider))
+      {:provider provider
+       :api-base (when (:openrouter-api-key env) api-base)})))
 
 (defmethod ig/init-key ::event-store [_ config]
   (es/start config))

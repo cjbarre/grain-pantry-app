@@ -18,11 +18,6 @@
     (assoc-in db [:pantry :shopping-list] items)))
 
 (rf/reg-event-db
-  ::set-recipes
-  (fn [db [_ recipes]]
-    (assoc-in db [:pantry :recipes] recipes)))
-
-(rf/reg-event-db
   ::set-loading
   (fn [db [_ loading?]]
     (assoc-in db [:pantry :loading] loading?)))
@@ -259,33 +254,6 @@
   ::move-to-pantry-failure
   (fn [db [_ error]]
     (assoc-in db [:pantry :error] error)))
-
-;;
-;; Fetch Recipe Matches
-;;
-
-(rf/reg-event-fx
-  ::fetch-recipe-matches
-  (fn [{:keys [db]} [_ api-client]]
-    {:db (assoc-in db [:pantry :loading] true)
-     ::pantry-fx/fetch-recipe-matches {:api-client api-client
-                                        :on-success [::fetch-recipe-matches-success]
-                                        :on-failure [::fetch-recipe-matches-failure]}}))
-
-(rf/reg-event-db
-  ::fetch-recipe-matches-success
-  (fn [db [_ recipes]]
-    (-> db
-        (assoc-in [:pantry :recipes] recipes)
-        (assoc-in [:pantry :loading] false)
-        (assoc-in [:pantry :error] nil))))
-
-(rf/reg-event-db
-  ::fetch-recipe-matches-failure
-  (fn [db [_ error]]
-    (-> db
-        (assoc-in [:pantry :loading] false)
-        (assoc-in [:pantry :error] error))))
 
 ;;
 ;; Pantry Form State Management

@@ -7,8 +7,11 @@
             [ai.obney.grain.time.interface :as time]
             [ai.obney.workshop.ai-agent-service.core.signatures :as sigs]
             [ai.obney.workshop.ai-agent-service.core.schemas :as schemas]
+            [ai.obney.workshop.ai-agent-service.core.brave-search :as brave]
             [ai.obney.workshop.pantry-service.interface :as pantry]
-            [clojure.walk :as walk]))
+            [clojure.string :as str]
+            [clojure.walk :as walk]
+            [com.brunobonacci.mulog :as μ]))
 
 (defn stringify-uuids
   "Convert all UUID values in a data structure to strings for LLM consumption."
@@ -101,6 +104,293 @@
                           :suggested-actions suggested-actions}})]})
 
     bt/success))
+
+;;
+;; Recipe Search Actions
+;;
+
+(defn search-brave-for-recipes
+  "Search Brave Search API for recipes based on pantry items.
+
+   Reads pantry context from short-term memory and executes web search
+   using top ingredients. Stores raw search results in short-term memory."
+  [{:keys [st-memory config]}]
+  (try
+    (let [pantry-items (get-in @st-memory [:pantry_context :items])
+          api-key (:brave-api-key config)]
+
+      (when-not api-key
+        (μ/log ::brave-api-key-missing :message "BRAVE_SEARCH_API_KEY not configured")
+        (throw (ex-info "Brave Search API key not configured" {})))
+
+      ;; Extract ingredient names for search query
+      (let [ingredient-names (mapv :name (take 5 pantry-items))
+            _ (μ/log ::searching-recipes :ingredients ingredient-names)
+
+            ;; Execute Brave Search
+            search-results (brave/search-recipes ingredient-names api-key {:count 10})]
+
+        ;; Store results in short-term memory for DSPy action
+        (swap! st-memory assoc :search_results search-results)
+        (swap! st-memory assoc :pantry_items pantry-items)
+
+        (μ/log ::recipes-found :count (count (get-in search-results [:web :results])))
+        bt/success))
+
+    (catch Exception e
+      (μ/log ::brave-search-failed :exception e)
+      bt/failure)))
+
+(defn load-preference-signals
+  "Load preference signals from event store into short-term memory.
+
+   This action queries the event store for recipe interaction events
+   and builds preference signals that both DSPy and ranking can use."
+  [{:keys [event-store st-memory auth-claims]}]
+  (try
+    (let [household-id (:household-id auth-claims)
+
+          ;; Query recipe interaction events and convert to vector
+          events (into [] (es/read event-store
+                            {:types #{:ai/recipe-viewed
+                                     :ai/recipe-dismissed
+                                     :ai/recipe-marked-cooked}
+                             :tags #{[:household household-id]}}))
+
+          ;; Build preference signals from events
+          viewed (into [] (keep #(when (= (:event/type %) :ai/recipe-viewed)
+                                   (get-in % [:event/body :recipe-id])) events))
+          dismissed (into [] (keep #(when (= (:event/type %) :ai/recipe-dismissed)
+                                      (get-in % [:event/body :recipe-id])) events))
+          cooked (into [] (keep #(when (= (:event/type %) :ai/recipe-marked-cooked)
+                                   (get-in % [:event/body :recipe-id])) events))
+
+          preference-signals {:viewed-recipes viewed
+                             :dismissed-recipes dismissed
+                             :cooked-recipes cooked}]
+
+      (swap! st-memory assoc :preference_signals preference-signals)
+      (μ/log ::preference-signals-loaded
+             :viewed (count viewed)
+             :dismissed (count dismissed)
+             :cooked (count cooked))
+      bt/success)
+
+    (catch Exception e
+      (μ/log ::load-preferences-failed :exception e)
+      bt/failure)))
+
+(defn keywordize-recipes
+  "Convert recipe maps from string keys to keyword keys.
+
+   DSPy returns recipes with string keys (due to Python/transit serialization),
+   but ClojureScript expects keyword keys for destructuring.
+
+   Transforms: {\"title\" \"Spanish Rice\"} → {:title \"Spanish Rice\"}"
+  [{:keys [st-memory]}]
+  (try
+    (let [recipes (:recipes @st-memory)
+          keywordized (mapv (fn [recipe]
+                             (into {} (map (fn [[k v]]
+                                            [(if (keyword? k) k (keyword k)) v])
+                                          recipe)))
+                           recipes)]
+      (swap! st-memory assoc :recipes keywordized)
+      (μ/log ::recipes-keywordized :count (count keywordized))
+      bt/success)
+
+    (catch Exception e
+      (μ/log ::keywordize-failed :exception e)
+      bt/failure)))
+
+(defn rank-recipes-by-preferences
+  "Rank recipes based on preference signals.
+
+   Adjusts match scores based on user's past interactions:
+   - Cooked recipes: +30 points
+   - Viewed recipes: +10 points
+   - Dismissed recipes: -20 points"
+  [{:keys [st-memory]}]
+  (try
+    (let [recipes (:recipes @st-memory)
+          reasoning (:reasoning_per_recipe @st-memory)
+          preference-signals (:preference_signals @st-memory)
+
+          cooked-set (set (:cooked-recipes preference-signals))
+          viewed-set (set (:viewed-recipes preference-signals))
+          dismissed-set (set (:dismissed-recipes preference-signals))
+
+          ;; Calculate adjusted match scores
+          ranked-recipes (mapv
+                          (fn [recipe]
+                            (let [recipe-id (:id recipe)
+                                  base-score (or (:match-score recipe) 50)
+
+                                  ;; Adjust score based on preference signals
+                                  score (cond-> base-score
+                                          (contains? cooked-set recipe-id) (+ 30)
+                                          (contains? viewed-set recipe-id) (+ 10)
+                                          (contains? dismissed-set recipe-id) (- 20))
+
+                                  ;; Add AI reasoning from DSPy output
+                                  ai-reasoning (get reasoning recipe-id)]
+
+                              (assoc recipe
+                                     :match-score score
+                                     :ai-reasoning ai-reasoning)))
+                          recipes)
+
+          ;; Sort by match score (highest first)
+          sorted-recipes (vec (sort-by :match-score > ranked-recipes))]
+
+      (swap! st-memory assoc :recipes sorted-recipes)
+      (μ/log ::recipes-ranked :count (count sorted-recipes))
+      bt/success)
+
+    (catch Exception e
+      (μ/log ::ranking-failed :exception e)
+      bt/failure)))
+
+(defn enrich-recipe-ingredients
+  "Cross-reference recipe ingredients with pantry items.
+
+   Converts ingredient strings to maps with :have flag:
+   'chicken' → {:name 'chicken' :have true/false}
+
+   Also calculates :match-percent for each recipe based on
+   how many ingredients the user already has."
+  [{:keys [st-memory]}]
+  (try
+    (let [recipes (:recipes @st-memory)
+          pantry-items (get-in @st-memory [:pantry_context :items])
+
+          ;; Build set of available ingredient names (lowercase for matching)
+          available-set (into #{}
+                              (comp
+                               (map :name)
+                               (map str/lower-case)
+                               (map str/trim))
+                              pantry-items)
+
+          ;; Enrich each recipe
+          enriched-recipes
+          (mapv (fn [recipe]
+                  (if-let [ingredients (:ingredients recipe)]
+                    (let [enriched-ingredients
+                          (mapv (fn [ing-name]
+                                  (let [normalized (-> ing-name
+                                                      str/lower-case
+                                                      str/trim)
+                                        have? (contains? available-set normalized)]
+                                    {:name ing-name :have have?}))
+                                ingredients)
+
+                          ;; Calculate match percentage
+                          have-count (count (filter :have enriched-ingredients))
+                          total-count (count enriched-ingredients)
+                          match-percent (if (pos? total-count)
+                                         (int (* 100 (/ have-count total-count)))
+                                         0)]
+
+                      (assoc recipe
+                             :ingredients enriched-ingredients
+                             :match-percent match-percent))
+                    recipe))
+                recipes)]
+
+      (swap! st-memory assoc :recipes enriched-recipes)
+      (μ/log ::ingredients-enriched
+             :count (count enriched-recipes)
+             :available-ingredients (count available-set))
+      bt/success)
+
+    (catch Exception e
+      (μ/log ::enrichment-failed :exception e)
+      bt/failure)))
+
+(defn persist-recipe-suggestions
+  "Persist recipe search and suggestion events to event store."
+  [{:keys [event-store st-memory auth-claims]}]
+  (try
+    (let [recipes (:recipes @st-memory)
+          search-results (:search_results @st-memory)
+          household-id (:household-id auth-claims)
+          query (get-in search-results [:query :original])
+          results-count (count (get-in search-results [:web :results] []))]
+
+      ;; Emit recipe search event
+      (es/append event-store
+        {:events (concat
+                  ;; Search performed event
+                  [(es/->event
+                    {:type :ai/recipes-searched
+                     :tags #{[:household household-id]}
+                     :body {:query query
+                            :results-count results-count
+                            :household-id household-id}})]
+
+                  ;; Individual recipe suggestion events
+                  (mapv (fn [recipe]
+                          (es/->event
+                            {:type :ai/recipe-suggested
+                             :tags #{[:household household-id]}
+                             :body {:recipe-id (:id recipe)
+                                    :recipe-title (:title recipe)
+                                    :reasoning (:ai-reasoning recipe)
+                                    :match-score (:match-score recipe)
+                                    :household-id household-id}}))
+                        recipes))})
+
+      (μ/log ::recipes-persisted :count (count recipes))
+      bt/success)
+
+    (catch Exception e
+      (μ/log ::persist-failed :exception e)
+      bt/failure)))
+
+;;
+;; Behavior Trees
+;;
+
+(def recipe-search-tree
+  "Behavior tree for AI-powered recipe search.
+
+   Flow:
+   1. Load pantry context (existing action)
+   2. Load preference signals from events into short-term memory
+   3. Search Brave API for recipes
+   4. Parse results with DSPy RecipeSearcher
+   5. Keywordize recipe maps (convert string keys to keyword keys)
+   6. Rank recipes by preferences
+   7. Enrich recipe ingredients with availability data
+   8. Persist suggestions to event store"
+  [:sequence
+   ;; 1. Load pantry context
+   [:action load-pantry-context]
+
+   ;; 2. Load preference signals into short-term memory
+   [:action load-preference-signals]
+
+   ;; 3. Search Brave API
+   [:action search-brave-for-recipes]
+
+   ;; 4. Parse with DSPy RecipeSearcher
+   [:action {:id :recipe-parser
+             :signature #'sigs/RecipeSearcher
+             :operation :chain-of-thought}
+    dspy]
+
+   ;; 5. Keywordize recipe maps (DSPy returns string keys)
+   [:action keywordize-recipes]
+
+   ;; 6. Rank by preferences
+   [:action rank-recipes-by-preferences]
+
+   ;; 7. Enrich ingredients with pantry availability
+   [:action enrich-recipe-ingredients]
+
+   ;; 8. Persist to event store
+   [:action persist-recipe-suggestions]])
 
 (def pantry-copilot-tree
   "Main behavior tree for pantry AI assistant.

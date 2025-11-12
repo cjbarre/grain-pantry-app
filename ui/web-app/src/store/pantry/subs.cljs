@@ -14,11 +14,6 @@
     (get-in db [:pantry :shopping-list] [])))
 
 (rf/reg-sub
-  ::recipes
-  (fn [db _]
-    (get-in db [:pantry :recipes] [])))
-
-(rf/reg-sub
   ::loading
   (fn [db _]
     (get-in db [:pantry :loading] false)))

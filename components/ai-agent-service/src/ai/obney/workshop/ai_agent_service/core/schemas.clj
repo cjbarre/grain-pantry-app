@@ -32,4 +32,43 @@
             [:map
              [:type :keyword]
              [:description :string]
-             [:params :map]]]]})
+             [:params :map]]]]
+
+   ;; Recipe search schemas
+   ::web-search-results
+   [:map {:desc "Raw web search results from Brave Search API"}
+    [:web [:maybe [:map
+                   [:results [:vector [:map
+                                       [:title :string]
+                                       [:description [:maybe :string]]
+                                       [:url :string]]]]]]]
+    [:query [:map
+             [:original :string]]]]
+
+   ::preference-signals
+   [:map {:desc "User recipe preference signals learned from interactions"}
+    [:viewed-recipes [:vector :string]]
+    [:cooked-recipes [:vector :string]]
+    [:dismissed-recipes [:vector :string]]]
+
+   ::structured-recipe
+   [:map {:desc "Parsed recipe data"}
+    [:id :string]
+    [:title :string]
+    [:url [:maybe :string]]
+    [:description [:maybe :string]]
+    [:ingredients [:maybe [:vector :string]]]
+    [:instructions [:maybe [:vector :string]]]
+    [:time [:maybe :string]]
+    [:difficulty [:maybe :string]]]
+
+   ::structured-recipes
+   [:vector {:desc "List of parsed recipes"}
+    ::structured-recipe]
+
+   ::recipe-reasoning
+   [:string {:desc "AI's reasoning for why a recipe is suggested"}]
+
+   ::recipe-reasoning-map
+   [:map-of {:desc "Map of recipe IDs to reasoning"}
+    :string ::recipe-reasoning]})

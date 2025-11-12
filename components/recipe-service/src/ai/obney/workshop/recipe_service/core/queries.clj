@@ -74,28 +74,6 @@
 ;; Query Handlers
 ;;
 
-(defn match-pantry
-  "Find recipes that can be made with current pantry items"
-  [{{:keys [household-id]} :query
-    {:keys [user-id]} :auth-claims
-    :keys [event-store]}]
-  ;; TODO: Verify user is member of household
-  (let [pantry-items (->> (es/read event-store {:types pantry/pantry-event-types
-                                                 :tags #{[:household household-id]}})
-                          (pantry/apply-pantry-events)
-                          (vals))
-        matched-recipes (mapv #(calculate-match % pantry-items) mock-recipes)
-        sorted-recipes (sort-by :match-percent > matched-recipes)]
-    {:query/result
-     (mapv (fn [recipe]
-             {:id (:id recipe)
-              :title (:title recipe)
-              :time (:time recipe)
-              :difficulty (:difficulty recipe)
-              :match-percent (:match-percent recipe)
-              :ingredients (:ingredients recipe)})
-           sorted-recipes)}))
-
 (defn get-recipe-by-id
   "Get full recipe details by ID"
   [{{:keys [recipe-id]} :query
@@ -136,6 +114,5 @@
 ;;
 
 (def queries
-  {:recipes/match-pantry {:handler-fn #'match-pantry}
-   :recipes/get-by-id {:handler-fn #'get-recipe-by-id}
+  {:recipes/get-by-id {:handler-fn #'get-recipe-by-id}
    :recipes/search {:handler-fn #'search-recipes}})

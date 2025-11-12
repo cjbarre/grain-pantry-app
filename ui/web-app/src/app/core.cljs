@@ -15,7 +15,10 @@
             [store.auth.subs]
             [store.ai.effects]
             [store.ai.events]
-            [store.ai.subs]))
+            [store.ai.subs]
+            [store.recipes.effects]
+            [store.recipes.events]
+            [store.recipes.subs]))
 
 (defui app []
   ($ :<>

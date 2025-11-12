@@ -26,7 +26,8 @@
    Queries the event store for pantry items and builds context including:
    - All pantry items for the household
    - Items expiring soon (within 3 days)
-   - Available categories"
+   - Available categories
+   - Shopping list items"
   [{:keys [event-store st-memory auth-claims]}]
   (let [household-id (:household-id auth-claims)
 
@@ -37,6 +38,14 @@
                          (pantry/apply-pantry-events)
                          vals
                          vec)
+
+        ;; Query shopping list events with household tag filter
+        shopping-items (->> (es/read event-store
+                              {:types pantry/shopping-event-types
+                               :tags #{[:household household-id]}})
+                           (pantry/apply-shopping-events)
+                           vals
+                           vec)
 
         ;; Calculate expiring soon items
         now (java.time.LocalDate/now)
@@ -62,7 +71,8 @@
       {:current-date (str now)
        :items (stringify-uuids pantry-items)
        :expiring-soon (stringify-uuids expiring-soon)
-       :categories categories})
+       :categories categories
+       :shopping-list (stringify-uuids shopping-items)})
 
     bt/success))
 

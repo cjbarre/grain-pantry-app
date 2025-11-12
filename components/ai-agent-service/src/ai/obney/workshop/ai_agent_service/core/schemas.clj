@@ -18,7 +18,8 @@
     [:current-date :string]
     [:items [:vector :map]]
     [:expiring-soon [:vector :map]]
-    [:categories [:vector :string]]]
+    [:categories [:vector :string]]
+    [:shopping-list [:vector :map]]]
 
    ::question
    [:string {:desc "User's current question"}]

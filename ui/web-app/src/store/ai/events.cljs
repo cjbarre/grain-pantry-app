@@ -16,16 +16,27 @@
                      :on-success [::ask-ai-success]
                      :on-failure [::ask-ai-failure]}}))
 
-(rf/reg-event-db
+(rf/reg-event-fx
   ::ask-ai-success
-  (fn [db [_ response]]
-    (-> db
-        (update-in [:ai :conversation] (fnil conj [])
-          {:role "assistant"
-           :content (:response response)
-           :suggested-actions (:suggested-actions response)})
-        (assoc-in [:ai :loading] false)
-        (assoc-in [:ai :error] nil))))
+  (fn [{:keys [db]} [_ response]]
+    (let [auto-accept? (get-in db [:ai :auto-accept] false)
+          suggested-actions (:suggested-actions response)
+          has-actions? (seq suggested-actions)
+          ;; Message index will be current conversation count (before adding this message)
+          message-idx (count (get-in db [:ai :conversation] []))]
+
+      {:db (-> db
+               (update-in [:ai :conversation] (fnil conj [])
+                 {:role "assistant"
+                  :content (:response response)
+                  :suggested-actions suggested-actions})
+               (assoc-in [:ai :loading] false)
+               (assoc-in [:ai :error] nil))
+
+       ;; Auto-execute actions if auto-accept is enabled
+       :dispatch-n (if (and auto-accept? has-actions?)
+                     [[::execute-actions-batch suggested-actions message-idx]]
+                     [])})))
 
 (rf/reg-event-db
   ::ask-ai-failure
@@ -256,3 +267,12 @@
        ;; Refresh data once after all actions complete
        :dispatch-n [[::pantry-events/fetch-pantry-items (:api/client db)]
                     [::pantry-events/fetch-shopping-list (:api/client db)]]})))
+
+;;
+;; Auto-Accept Toggle
+;;
+
+(rf/reg-event-db
+  ::toggle-auto-accept
+  (fn [db [_ enabled?]]
+    (assoc-in db [:ai :auto-accept] enabled?)))

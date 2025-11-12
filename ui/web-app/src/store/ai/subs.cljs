@@ -26,3 +26,8 @@
   ::executed-batches
   (fn [db _]
     (get-in db [:ai :executed-batches] #{})))
+
+(rf/reg-sub
+  ::auto-accept
+  (fn [db _]
+    (get-in db [:ai :auto-accept] false)))

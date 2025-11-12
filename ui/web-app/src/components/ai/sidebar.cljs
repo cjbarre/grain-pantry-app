@@ -7,6 +7,8 @@
             ["/gen/shadcn/components/ui/card" :as card]
             ["/gen/shadcn/components/ui/button" :as button]
             ["/gen/shadcn/components/ui/input" :as input]
+            ["/gen/shadcn/components/ui/switch" :as switch]
+            ["/gen/shadcn/components/ui/label" :as label]
             ["lucide-react" :refer [Send Bot User ChevronRight]]
             ["marked" :as marked]
             [store.ai.subs :as ai-subs]
@@ -126,6 +128,7 @@
   [{:keys [collapsed on-toggle]}]
   (let [conversation (use-subscribe [::ai-subs/conversation])
         loading (use-subscribe [::ai-subs/loading])
+        auto-accept (use-subscribe [::ai-subs/auto-accept])
         [input-value set-input-value] (use-state "")
         messages-end-ref (use-ref nil)
 
@@ -136,6 +139,9 @@
 
         handle-toggle (fn []
                        (when on-toggle (on-toggle)))
+
+        handle-auto-accept-change (fn [checked]
+                                   (rf/dispatch [::ai-events/toggle-auto-accept checked]))
 
         ;; Auto-scroll to bottom on new messages
         _ (use-effect
@@ -156,12 +162,28 @@
       ;; Expanded state - full sidebar
       ;; Mobile: full width with small margins, Desktop (lg): fixed 384px width
       ($ card/Card {:class "fixed left-2 right-2 top-20 bottom-4 lg:left-auto lg:right-4 lg:w-96 flex flex-col z-50"}
-         ($ card/CardHeader {:class "flex-row items-center justify-between pb-3 cursor-pointer"
-                            :on-click handle-toggle}
-            ($ :div {:class "flex items-center gap-2"}
+         ($ card/CardHeader {:class "flex-row items-center justify-between pb-3"}
+            ;; Left: Title (clickable to collapse)
+            ($ :div {:class "flex items-center gap-2 cursor-pointer flex-1"
+                     :on-click handle-toggle}
                ($ Bot {:size 20 :class "text-primary"})
                ($ card/CardTitle "AI Copilot"))
-            ($ ChevronRight {:size 20 :class "text-muted-foreground"}))
+
+            ;; Middle: Auto-accept toggle (stop propagation to prevent collapse)
+            ($ :div {:class (str "flex items-center gap-2 mr-2 transition-opacity "
+                                (when-not auto-accept "opacity-50"))
+                     :on-click #(.stopPropagation %)}
+               ($ label/Label {:class "text-xs text-muted-foreground cursor-pointer select-none"
+                               :htmlFor "auto-accept-switch"}
+                  "Auto-accept")
+               ($ switch/Switch {:id "auto-accept-switch"
+                                 :checked auto-accept
+                                 :onCheckedChange handle-auto-accept-change}))
+
+            ;; Right: Collapse chevron (clickable to collapse)
+            ($ :div {:class "cursor-pointer"
+                     :on-click handle-toggle}
+               ($ ChevronRight {:size 20 :class "text-muted-foreground"})))
 
          ($ card/CardContent {:class "flex-1 flex flex-col min-h-0 pb-3"}
             ;; Chat history

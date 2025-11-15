@@ -24,45 +24,14 @@
                          [:recipe-title :string]
                          [:reasoning :string]
                          [:match-score :int]
-                         [:household-id :uuid]]
-
-   ;; Recipe interaction tracking events
-   :ai/recipe-viewed [:map
-                      [:recipe-id :string]
-                      [:recipe-title [:maybe :string]]
-                      [:household-id :uuid]
-                      [:user-id :uuid]]
-
-   :ai/recipe-dismissed [:map
-                         [:recipe-id :string]
-                         [:recipe-title [:maybe :string]]
-                         [:household-id :uuid]
-                         [:user-id :uuid]]
-
-   :ai/recipe-marked-cooked [:map
-                             [:recipe-id :string]
-                             [:recipe-title [:maybe :string]]
-                             [:household-id :uuid]
-                             [:user-id :uuid]]})
+                         [:household-id :uuid]]})
 
 ;; Commands
 (defschemas commands
   {:ai/ask [:map
             [:question :string]]
 
-   :ai/search-recipes [:map]
-
-   :ai/track-recipe-view [:map
-                          [:recipe-id :string]
-                          [:recipe-title [:maybe :string]]]
-
-   :ai/track-recipe-dismiss [:map
-                             [:recipe-id :string]
-                             [:recipe-title [:maybe :string]]]
-
-   :ai/mark-recipe-cooked [:map
-                           [:recipe-id :string]
-                           [:recipe-title [:maybe :string]]]})
+   :ai/search-recipes [:map]})
 
 ;; Command Results
 (defschemas command-results

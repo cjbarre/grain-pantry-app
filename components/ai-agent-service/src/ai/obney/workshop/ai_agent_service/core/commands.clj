@@ -112,42 +112,6 @@
        ::anom/message (str "Recipe search error: " (.getMessage e))
        ::anom/ex-data (ex-data e)})))
 
-(defn track-recipe-interaction
-  "Track user interaction with a recipe.
-
-   Command: {:recipe-id \"...\" :recipe-title \"...\"}
-   Auth claims: {:household-id <uuid> :user-id <uuid>}
-
-   Emits event based on interaction type."
-  [interaction-type
-   {{:keys [recipe-id recipe-title]} :command
-    {:keys [household-id user-id]} :auth-claims
-    :keys [event-store]}]
-
-  (try
-    (when-not (and household-id user-id)
-      (throw (ex-info "Missing auth claims" {:household-id household-id :user-id user-id})))
-
-    (when-not recipe-id
-      (throw (ex-info "Missing recipe-id" {:command :recipe-id})))
-
-    ;; Emit interaction event
-    (es/append event-store
-      {:events [(es/->event
-                  {:type interaction-type
-                   :tags #{[:household household-id] [:user user-id]}
-                   :body {:recipe-id recipe-id
-                          :recipe-title recipe-title
-                          :household-id household-id
-                          :user-id user-id}})]})
-
-    {:command/result {:success true}}
-
-    (catch Exception e
-      {::anom/category ::anom/fault
-       ::anom/message (str "Failed to track interaction: " (.getMessage e))
-       ::anom/ex-data (ex-data e)})))
-
 ;;
 ;; Command Registry
 ;;
@@ -156,10 +120,4 @@
   "Command registry for AI agent service"
   {:ai/ask {:handler-fn #'ask-ai}
 
-   :ai/search-recipes {:handler-fn #'search-recipes}
-
-   :ai/track-recipe-view {:handler-fn (partial track-recipe-interaction :ai/recipe-viewed)}
-
-   :ai/track-recipe-dismiss {:handler-fn (partial track-recipe-interaction :ai/recipe-dismissed)}
-
-   :ai/mark-recipe-cooked {:handler-fn (partial track-recipe-interaction :ai/recipe-marked-cooked)}})
+   :ai/search-recipes {:handler-fn #'search-recipes}})

@@ -180,45 +180,6 @@
       (μ/log ::brave-search-failed :exception e)
       bt/failure)))
 
-(defn load-preference-signals
-  "Load preference signals from event store into short-term memory.
-
-   This action queries the event store for recipe interaction events
-   and builds preference signals that both DSPy and ranking can use."
-  [{:keys [event-store st-memory auth-claims]}]
-  (try
-    (let [household-id (:household-id auth-claims)
-
-          ;; Query recipe interaction events and convert to vector
-          events (into [] (es/read event-store
-                            {:types #{:ai/recipe-viewed
-                                     :ai/recipe-dismissed
-                                     :ai/recipe-marked-cooked}
-                             :tags #{[:household household-id]}}))
-
-          ;; Build preference signals from events
-          viewed (into [] (keep #(when (= (:event/type %) :ai/recipe-viewed)
-                                   (get-in % [:event/body :recipe-id])) events))
-          dismissed (into [] (keep #(when (= (:event/type %) :ai/recipe-dismissed)
-                                      (get-in % [:event/body :recipe-id])) events))
-          cooked (into [] (keep #(when (= (:event/type %) :ai/recipe-marked-cooked)
-                                   (get-in % [:event/body :recipe-id])) events))
-
-          preference-signals {:viewed-recipes viewed
-                             :dismissed-recipes dismissed
-                             :cooked-recipes cooked}]
-
-      (swap! st-memory assoc :preference_signals preference-signals)
-      (μ/log ::preference-signals-loaded
-             :viewed (count viewed)
-             :dismissed (count dismissed)
-             :cooked (count cooked))
-      bt/success)
-
-    (catch Exception e
-      (μ/log ::load-preferences-failed :exception e)
-      bt/failure)))
-
 (defn keywordize-recipes
   "Convert recipe maps from string keys to keyword keys.
 
@@ -242,62 +203,6 @@
       (μ/log ::keywordize-failed :exception e)
       bt/failure)))
 
-(defn rank-recipes-by-preferences
-  "Rank recipes based on ingredient match and preference signals.
-
-   Uses match-percent (calculated by enrichment) as the base score,
-   then adjusts based on user's past interactions:
-   - Cooked recipes: +30 points
-   - Viewed recipes: +10 points
-   - Dismissed recipes: -20 points
-
-   IMPORTANT: This must run AFTER enrich-recipe-ingredients so that
-   match-percent is available as the base score."
-  [{:keys [st-memory]}]
-  (try
-    (let [recipes (:filtered-recipes @st-memory)
-          reasoning (:reasoning_per_recipe @st-memory)
-          preference-signals (:preference_signals @st-memory)
-
-          cooked-set (set (:cooked-recipes preference-signals))
-          viewed-set (set (:viewed-recipes preference-signals))
-          dismissed-set (set (:dismissed-recipes preference-signals))
-
-          ;; Calculate adjusted match scores
-          ranked-recipes (mapv
-                          (fn [recipe]
-                            (let [recipe-id (:id recipe)
-                                  ;; Use match-percent (from enrichment) as base score
-                                  ;; Fall back to match-score (from DSPy) or 50 if neither exists
-                                  base-score (or (:match-percent recipe)
-                                                (:match-score recipe)
-                                                50)
-
-                                  ;; Adjust score based on preference signals
-                                  score (cond-> base-score
-                                          (contains? cooked-set recipe-id) (+ 30)
-                                          (contains? viewed-set recipe-id) (+ 10)
-                                          (contains? dismissed-set recipe-id) (- 20))
-
-                                  ;; Add AI reasoning from DSPy output
-                                  ai-reasoning (get reasoning recipe-id)]
-
-                              (assoc recipe
-                                     :match-score score
-                                     :ai-reasoning ai-reasoning)))
-                          recipes)
-
-          ;; Sort by match score (highest first)
-          sorted-recipes (vec (sort-by :match-score > ranked-recipes))]
-
-      (swap! st-memory assoc :filtered-recipes sorted-recipes)
-      (μ/log ::recipes-ranked :count (count sorted-recipes))
-      bt/success)
-
-    (catch Exception e
-      (μ/log ::ranking-failed :exception e)
-      bt/failure)))
-
 (defn enrich-recipe-ingredients
   "Cross-reference recipe ingredients with pantry items.
 
@@ -305,11 +210,14 @@
    'chicken' → {:name 'chicken' :have true/false}
 
    Also calculates :match-percent for each recipe based on
-   how many ingredients the user already has."
+   how many ingredients the user already has.
+
+   Recipes are sorted by match-percent (highest first)."
   [{:keys [st-memory]}]
   (try
     (let [recipes (:filtered-recipes @st-memory)
           pantry-items (get-in @st-memory [:pantry_context :items])
+          reasoning (:reasoning_per_recipe @st-memory)
 
           ;; Build set of available ingredient names (lowercase for matching)
           available-set (into #{}
@@ -337,17 +245,26 @@
                           total-count (count enriched-ingredients)
                           match-percent (if (pos? total-count)
                                          (int (* 100 (/ have-count total-count)))
-                                         0)]
+                                         0)
+
+                          ;; Add AI reasoning from DSPy output
+                          recipe-id (:id recipe)
+                          ai-reasoning (get reasoning recipe-id)]
 
                       (assoc recipe
                              :ingredients enriched-ingredients
-                             :match-percent match-percent))
+                             :match-percent match-percent
+                             :match-score match-percent
+                             :ai-reasoning ai-reasoning))
                     recipe))
-                recipes)]
+                recipes)
 
-      (swap! st-memory assoc :filtered-recipes enriched-recipes)
+          ;; Sort by match-percent (highest first)
+          sorted-recipes (vec (sort-by :match-percent > enriched-recipes))]
+
+      (swap! st-memory assoc :filtered-recipes sorted-recipes)
       (μ/log ::ingredients-enriched
-             :count (count enriched-recipes)
+             :count (count sorted-recipes)
              :available-ingredients (count available-set))
       bt/success)
 
@@ -560,8 +477,7 @@
    Flow:
    1. Initialize recipe search accumulators
    2. Load pantry context
-   3. Load preference signals from events into short-term memory
-   4. Loop search iterations until 6+ recipes or max attempts (5):
+   3. Loop search iterations until 6+ recipes or max attempts (5):
       Each iteration runs recipe-search-iteration-subtree:
       a. Search Brave API for recipes (varied query strategy per iteration)
       b. Parse with DSPy RecipeSearcher (semantic filtering against previous results)
@@ -570,9 +486,8 @@
       e. Increment search page for next iteration
       f. Prepare previous_recipes for next DSPy filtering
       Loop continues until 6+ recipes accumulated or 5 attempts exhausted.
-   5. Enrich recipe ingredients with availability data (calculates match-percent)
-   6. Rank accumulated recipes by preferences (adjusts match-percent with preference bonuses)
-   7. Persist suggestions to event store
+   4. Enrich recipe ingredients with availability data (calculates match-percent and sorts by it)
+   5. Persist suggestions to event store
 
    The DSPy RecipeSearcher handles RIGOROUS semantic deduplication:
    - Aggressively filters similar recipes (e.g., ALL chicken prep methods grouped as 'chicken')
@@ -581,8 +496,8 @@
    - Strictly avoids recipes similar to previous_recipes from earlier searches
    - Goal: Return recipes so different they couldn't be grouped together
 
-   Note: Order is important! Enrichment must run before ranking so match-percent
-   is calculated and available as the base score."
+   Recipes are ranked purely by ingredient match percentage (how many ingredients
+   the user already has in their pantry)."
   [:sequence
    ;; 1. Initialize accumulators
    [:action initialize-recipe-search]
@@ -590,19 +505,13 @@
    ;; 2. Load pantry context
    [:action load-pantry-context]
 
-   ;; 3. Load preference signals into short-term memory
-   [:action load-preference-signals]
-
-   ;; 4. Loop search iterations until 6+ recipes or max attempts (5)
+   ;; 3. Loop search iterations until 6+ recipes or max attempts (5)
    [:action search-recipes-until-enough]
 
-   ;; 5. Enrich ingredients with pantry availability (calculates match-percent)
+   ;; 4. Enrich ingredients with pantry availability (calculates and sorts by match-percent)
    [:action enrich-recipe-ingredients]
 
-   ;; 6. Rank accumulated recipes by preferences (uses match-percent as base)
-   [:action rank-recipes-by-preferences]
-
-   ;; 7. Persist to event store
+   ;; 5. Persist to event store
    [:action persist-recipe-suggestions]])
 
 (def pantry-copilot-tree

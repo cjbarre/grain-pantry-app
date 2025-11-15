@@ -6,7 +6,7 @@
             ["/gen/shadcn/components/ui/button" :as button]
             ["/gen/shadcn/components/ui/badge" :as badge]
             ["/gen/shadcn/components/ui/progress" :as progress]
-            ["lucide-react" :refer [Check X ShoppingCart Clock ChefHat Sparkles ThumbsDown]]
+            ["lucide-react" :refer [Check X ShoppingCart Clock ChefHat Sparkles]]
             [components.context.interface :as context]
             [components.recipes.ai-insight :as ai-insight]
             [store.recipes.events :as recipe-events]
@@ -39,9 +39,7 @@
         display-match (or match-score match-percent 0)
         is-ai-recipe? (boolean ai-reasoning)]
 
-    ($ card/Card {:class "flex flex-col hover:shadow-lg transition-shadow"
-                  :on-click #(when (and api-client (:id recipe))
-                              (rf/dispatch [::recipe-events/track-view recipe api-client]))}
+    ($ card/Card {:class "flex flex-col hover:shadow-lg transition-shadow"}
        ($ card/CardHeader
           ($ :div {:class "flex items-start justify-between gap-2"}
              ($ :div {:class "flex-1"}
@@ -102,16 +100,6 @@
             ($ button/Button {:variant "default" :class "flex-1"}
                ($ ChefHat {:size 16 :class "mr-2"})
                "View Recipe"))
-
-          ;; Tracking buttons
-          (when is-ai-recipe?
-            ($ button/Button {:variant "ghost"
-                              :size "icon"
-                              :title "Not interested"
-                              :on-click #(do
-                                          (.stopPropagation %)
-                                          (rf/dispatch [::recipe-events/track-dismiss recipe api-client]))}
-               ($ ThumbsDown {:size 16})))
 
           (when-not can-make?
             ($ button/Button {:variant "outline"
